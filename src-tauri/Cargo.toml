@@ -1,0 +1,21 @@
+[package]
+name = "jv-desktop"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "jv_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "2.7.0"
+
+[dependencies]
+tauri = "2.12.0"
+tauri-plugin-dialog = "2.8.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+jv-desktop-process = { path = "../crates/jv-process" }

@@ -1,0 +1,68 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import App from '../src/App';
+import { Composer } from '../src/components/Composer';
+import { Conversation } from '../src/components/Conversation';
+import { MockBackend } from '../src/lib/mock-backend';
+import type { JvBackend } from '../src/types/events';
+
+afterEach(cleanup);
+function setup() {
+  const demo = new MockBackend(async () => '/demo/workspace', 0);
+  const native: JvBackend = {
+    detectBackend: vi.fn(async () => ({ availability: 'unavailable' as const, canRun: false, detail: 'JV CLI is not installed.' })),
+    chooseWorkspace: vi.fn(async () => '/chosen/workspace'), runTurn: vi.fn(), cancelTurn: vi.fn(),
+  };
+  render(<App backends={{ demo, native }} />); return { demo, native };
+}
+describe('workspace and conversation', () => {
+  it('requires selection, completes an offline conversation, and stays usable', async () => {
+    setup(); const send = screen.getByRole('button', { name: /Send message/ }) as HTMLButtonElement;
+    fireEvent.change(screen.getByLabelText('Message JV'), { target: { value: 'ช่วยตรวจ project นี้' } });
+    expect(send.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    await waitFor(() => expect(send.disabled).toBe(false)); fireEvent.click(send);
+    expect(await screen.findByText(/your offline preview is ready/)).toBeTruthy();
+    expect(screen.getByText('ช่วยตรวจ project นี้')).toBeTruthy();
+    expect(await screen.findByText('Turn complete')).toBeTruthy();
+    expect(screen.getByText('Command completed')).toBeTruthy();
+  });
+  it('shows backend unavailable and never submits through that backend', async () => {
+    const { native } = setup();
+    fireEvent.change(screen.getByLabelText('Backend mode'), { target: { value: 'native' } });
+    expect(await screen.findByText('JV CLI: unavailable')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    await screen.findByText('/chosen/workspace');
+    fireEvent.change(screen.getByLabelText('Message JV'), { target: { value: 'test' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send message/ }));
+    expect(native.runTurn).not.toHaveBeenCalled();
+    expect(native.detectBackend).toHaveBeenCalledTimes(1);
+  });
+  it('disables networking in read-only mode and preserves explicit write permissions', async () => {
+    setup(); const network = screen.getByLabelText('Tool network') as HTMLInputElement;
+    expect(network.disabled).toBe(true); expect(network.checked).toBe(false);
+    fireEvent.change(screen.getByLabelText('Workspace permission'), { target: { value: 'workspace-write' } });
+    fireEvent.click(network); expect(network.checked).toBe(true);
+    fireEvent.change(screen.getByLabelText('Workspace permission'), { target: { value: 'read-only' } });
+    expect(network.checked).toBe(false); expect(network.disabled).toBe(true);
+  });
+  it('keeps assistant HTML inert', () => {
+    const { container } = render(<Conversation busy={false} demo messages={[{ id: 'one', role: 'assistant', text: '<img src=x onerror=alert(1)><script>bad()</script>' }]} />);
+    expect(container.querySelector('img,script')).toBeNull();
+    expect(screen.getByText(/<img src=x/)).toBeTruthy();
+  });
+});
+
+describe('IME-safe composer', () => {
+  it('does not send during composition, keyCode 229, or Shift+Enter', () => {
+    const send = vi.fn();
+    render(<Composer prompt="สวัสดี" permissions={{ access: 'read-only', network: false }} busy={false} canSend
+      onPrompt={() => {}} onPermissions={() => {}} onSend={send} onCancel={() => {}} />);
+    const input = screen.getByLabelText('Message JV');
+    fireEvent.compositionStart(input); fireEvent.keyDown(input, { key: 'Enter' }); expect(send).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input); fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true }); expect(send).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' }); expect(send).toHaveBeenCalledTimes(1);
+  });
+});

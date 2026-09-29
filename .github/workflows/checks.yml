@@ -1,0 +1,51 @@
+name: Desktop foundation checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shared:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CARGO_HOME: ${{ github.workspace }}/.cache/cargo
+      RUSTUP_HOME: ${{ github.workspace }}/.tools/rustup
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Install Rust into job-local toolchain directory
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.98.1
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run rust:fmt
+      - run: npm run rust:check
+      - run: npm run rust:test
+      - run: npm run rust:clippy
+      - name: Offline browser acceptance (only loopback network permitted)
+        if: runner.os == 'Linux'
+        run: |
+          npm run browser:install
+          npm run test:e2e
+      - name: Windows desktop compile check (backend intentionally unsupported)
+        if: runner.os == 'Windows'
+        run: npm run tauri:check
+      # Linux GUI compilation needs a separately provisioned GTK/WebKit runner.
+      # No JV credentials, native tasks, packaging, publishing, or release steps.
