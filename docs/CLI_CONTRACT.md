@@ -12,7 +12,8 @@ The installed executable still reports **JV CLI 0.4.7** through the local-only
 `--version` path. The independent sibling source tree reports **0.4.8** in its
 `VERSION` file. Neither installation nor source was upgraded or modified. The
 0.4.7 inspection below does not establish 0.4.8 machine-facing behavior. Real
-integration requires a separately reviewed version compatibility decision,
+integration must choose and verify a single compatibility baseline before any
+real Desktop turn is allowed. It requires a separately reviewed version decision,
 prompt transport, authentication and cancellation contract. Detection of either
 version must never open the native turn gate.
 

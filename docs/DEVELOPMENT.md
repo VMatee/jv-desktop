@@ -76,12 +76,11 @@ submission is disabled in Rust and UI. No authentication form is implemented.
 | `npm run tauri -- build --bundles deb,rpm` | Production Linux executable plus Debian/RPM packages, no installation or publication |
 | `npm run tauri -- build --no-bundle` | Compile native executable; requires full host prerequisites |
 
-The Milestone 2 host has the native development libraries and passes Tauri
-compilation and Debian/RPM packaging. The restricted agent session cannot access
-its X11 display or the browser test loopback server. AppImage helper downloads
-are also blocked by DNS resolution. See [Validation](VALIDATION.md) for exact
-results and the remaining manual native acceptance checklist. Do not change
-system configuration or disable security controls to work around these limits.
+The host now passes native compilation, Debian/RPM/AppImage packaging and
+offline browser acceptance. X11 access is available and the native shell has
+been exercised. See [Validation](VALIDATION.md) for exact coverage and
+[Manual acceptance](MANUAL_GUI_ACCEPTANCE.md) for the remaining GUI cases.
+Do not change system configuration or disable security controls for validation.
 
 All Cargo scripts put downloads in `.cache/cargo`, temporary files in `.cache/tmp`
 and compiled artifacts in `target`. npm uses `.cache/npm`. Browser downloads live

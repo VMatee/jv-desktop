@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { resolve, delimiter } from 'node:path';
+import { resolve } from 'node:path';
+import { prependPath } from './path-env.mjs';
 import { fileURLToPath } from 'node:url';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
@@ -12,7 +13,7 @@ export function toolEnv() {
   const localRust = resolve(root, '.tools/rustup');
   if (existsSync(localRust)) {
     env.RUSTUP_HOME = localRust;
-    env.PATH = resolve(cache, 'cargo/bin') + delimiter + (env.PATH ?? '');
+    prependPath(env, resolve(cache, 'cargo/bin'));
   }
   return env;
 }

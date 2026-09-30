@@ -6,5 +6,5 @@ export default defineConfig({
   clearScreen: false,
   server: { host: '127.0.0.1', port: 1420, strictPort: true },
   envPrefix: ['VITE_'],
-  test: { environment: 'jsdom', include: ['tests/**/*.test.{ts,tsx}'], setupFiles: ['./tests/setup.ts'], restoreMocks: true },
+  test: { environment: 'jsdom', include: ['tests/**/*.test.{ts,tsx,mjs}'], setupFiles: ['./tests/setup.ts'], restoreMocks: true },
 });

@@ -1,6 +1,100 @@
 # Validation record
 
-## Milestone 2: native Linux build validation — 2026-09-30
+## Offline/native follow-up — 2026-09-30
+
+Starting published commit: `b160011f152c2b0c68ba5c6c5d725563a83e8231`.
+Local `main` and freshly fetched `origin/main` matched; the worktree was clean.
+`RPALLMs/.git` is now absent. No workspace-root cleanup was performed here. All four siblings retained their
+starting HEADs and clean status at the final local regression check.
+This section supersedes the earlier environment blockers recorded below.
+
+### Current results
+
+- **24 frontend/tooling tests passed** (the original 21 plus 3 child PATH tests).
+- **10 Rust process-core tests and 3 Tauri IPC tests passed**.
+- TypeScript/frontend build, Rust fmt/core check/Clippy and Tauri native check pass.
+- **Offline browser acceptance passed** with its existing non-loopback request
+  blocking unchanged. It covers Thai conversation, mock Stop and compact layout.
+- Native executable, Debian and RPM artifacts were inspected read-only using
+  `file`; Debian control metadata was also inspected with `dpkg-deb --info`.
+  No package was installed.
+- **AppImage build passed** using `npm run tauri -- build --bundles appimage`.
+  Artifact: `target/release/bundle/appimage/JV Desktop_0.1.0_amd64.AppImage`,
+  **83,016,184 bytes**. It was identified as an x86-64 ELF AppImage runtime.
+  The AppImage itself was not launched or installed; the native executable was.
+  Nothing was uploaded or released.
+
+### Actual native graphical evidence
+
+`DISPLAY=:0`, X11, no Wayland variable. `xdpyinfo` successfully connected using
+existing session access. No display security configuration was changed. The
+production executable opened a viewable **JV Desktop** window and its React
+content was inspected through the accessibility tree. Validation used ignored
+repository-local XDG directories and a disposable `.cache/gui-validation/workspace`.
+A local-only GIO VFS override was used after isolated runtime paths produced GVFS
+warnings; no global setting was changed.
+
+Verified in the real native application:
+
+- Open Folder opened the native GTK chooser (also visually inspected).
+- Selecting the disposable workspace succeeded; the selected directory remained empty.
+- Selecting the user's home root returned the expected safe workspace error.
+- Thai characters entered through GTK's **Ctrl+Shift+U Unicode composition**
+  appeared intact. Enter confirming composition did not submit the conversation.
+  This exercises a real composition path, not every Thai keyboard/IME implementation.
+- Shift+Enter inserted a newline; a subsequent ordinary Enter sent the offline demo.
+- Simulated Thai assistant output, command activity and turn completion rendered.
+- Stop cancelled a second simulated turn and displayed the stopped message.
+
+Remaining real-GUI cases: intentional resize, root/application-folder rejection,
+permission-control interaction, owner-preferred Thai IME, native detected-but-disabled
+screen and direct IPC from a real WebView. Root validation and the registered IPC
+gate are covered by automated Rust tests; the IPC tests use Tauri MockRuntime,
+not the real WebView. The visible workspace later changed to an owner-selected
+path outside the disposable area, so automation stopped interacting with that
+window. No test turn was sent against that selection. Follow the
+[manual acceptance checklist](MANUAL_GUI_ACCEPTANCE.md) to finish those cases.
+
+### CI diagnosis and correction
+
+The baseline [Actions run](https://github.com/VMatee/jv-desktop/actions/runs/36666359733)
+was inspected through the existing GitHub connector after an unauthenticated
+API request returned 404 for this private repository:
+
+- Ubuntu: **passed**, including browser acceptance.
+- Windows: **failed at `npm run rust:fmt`**, reporting Cargo unavailable.
+  Frontend tests/build passed; later Rust checks and Windows Tauri compilation
+  were skipped.
+
+The wrapper spread Windows' `Path` then assigned a separate `PATH` from an
+undefined `env.PATH`, discarding the inherited Cargo lookup path for child
+processes. The fix preserves the existing key spelling, removes duplicate
+Windows spellings using Node's precedence, and prepends the local tool directory.
+Three regression tests cover Windows Path, duplicate spellings and Unix behavior.
+See [Node child-process environment behavior](https://nodejs.org/api/child_process.html).
+No CI gate was removed or weakened. A new Windows runner result is still required
+before claiming Windows native compilation passes.
+
+### Unchanged security and integration boundary
+
+Only the four application commands are granted to the main window; no general
+shell/process/filesystem or unrestricted core capability was added. Production
+CSP and `native_turn_gate` remain unchanged. Direct registered IPC tests still
+return `authentication-required` for every valid policy, reject executable
+injection and deny unused core commands. Rust remains the process boundary.
+
+Installed local-only `jvcli --version`: **0.4.7**. Source `jvcli/VERSION`: **0.4.8**.
+Neither changed. A later milestone must choose and verify one compatibility
+baseline, then separately review prompt transport, authentication and cancellation
+before allowing real turns. No bridge, password UX, resume, terminal or Windows
+backend was implemented.
+
+**Zero real JV jobs and zero production inference requests. No JV credential was
+used. No credential or private-key contents were inspected or persisted.** Existing
+GitHub connector/SSH authentication was used only for authorized repository work;
+no authentication configuration was changed.
+
+## Previous run: native Linux build validation — 2026-09-30
 
 Starting commit: `42f46531efe912c8c78304a1b5087b7d2b98721e`, clean `main`.
 This is **offline development verification**, not production acceptance.

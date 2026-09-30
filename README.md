@@ -39,8 +39,10 @@ described in [Development](docs/DEVELOPMENT.md), then use `npm run tauri -- dev`
 The Native JV CLI mode only performs a bounded local `--version` check. Detection
 does not establish authentication or production health.
 
-Native Linux compilation and Debian/RPM packaging have been validated. Native
-GUI acceptance remains pending: this agent session cannot access the X11 display.
+Native Linux compilation and Debian/RPM/AppImage packaging have been validated.
+The real X11/WebView shell, folder picker, Thai Unicode composition and offline
+conversation/Stop were exercised. Remaining GUI checks are listed in
+[Manual acceptance](docs/MANUAL_GUI_ACCEPTANCE.md).
 See [Validation](docs/VALIDATION.md) for the distinction between compiled artifacts,
 mock IPC checks, browser checks and actual native runtime validation.
 
