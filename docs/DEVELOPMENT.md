@@ -72,11 +72,16 @@ submission is disabled in Rust and UI. No authentication form is implemented.
 | `npm run browser:install` | Download a repository-local Chromium headless shell; no OS packages |
 | `npm run test:e2e` | Offline browser workflow, Stop, native blocker and responsive layout |
 | `npm run tauri:check` | Compile/type-check native Tauri code; requires GUI development libraries |
+| `npm run tauri:test` | Linux registered-command/ACL tests using Tauri MockRuntime; needs native libraries, no display or CLI |
+| `npm run tauri -- build --bundles deb,rpm` | Production Linux executable plus Debian/RPM packages, no installation or publication |
 | `npm run tauri -- build --no-bundle` | Compile native executable; requires full host prerequisites |
 
-The current host cannot perform a Linux Tauri check/build because native system
-libraries are missing; see [Validation](VALIDATION.md). Do not run a package
-manager or `sudo` to repair the host. Finish the independent checks instead.
+The Milestone 2 host has the native development libraries and passes Tauri
+compilation and Debian/RPM packaging. The restricted agent session cannot access
+its X11 display or the browser test loopback server. AppImage helper downloads
+are also blocked by DNS resolution. See [Validation](VALIDATION.md) for exact
+results and the remaining manual native acceptance checklist. Do not change
+system configuration or disable security controls to work around these limits.
 
 All Cargo scripts put downloads in `.cache/cargo`, temporary files in `.cache/tmp`
 and compiled artifacts in `target`. npm uses `.cache/npm`. Browser downloads live

@@ -17,6 +17,7 @@
     "rust:test": "node scripts/cargo.mjs test -p jv-desktop-process --features test-fixture --locked",
     "rust:fmt": "node scripts/cargo.mjs fmt --all -- --check",
     "rust:clippy": "node scripts/cargo.mjs clippy -p jv-desktop-process --all-targets --features test-fixture --locked -- -D warnings",
+    "tauri:test": "node scripts/cargo.mjs test -p jv-desktop --lib --locked",
     "tauri:check": "node scripts/cargo.mjs check -p jv-desktop --locked",
     "test:e2e": "node scripts/browser.mjs test",
     "browser:install": "node scripts/browser.mjs install chromium --only-shell"

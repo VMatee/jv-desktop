@@ -6,6 +6,16 @@ No account configuration, session, environment secret, credential or key content
 was opened. No real exec/resume command was run. Re-inspect this contract before
 enabling native submission; version detection alone cannot prove compatibility.
 
+## Milestone 2 version observation (2026-09-30)
+
+The installed executable still reports **JV CLI 0.4.7** through the local-only
+`--version` path. The independent sibling source tree reports **0.4.8** in its
+`VERSION` file. Neither installation nor source was upgraded or modified. The
+0.4.7 inspection below does not establish 0.4.8 machine-facing behavior. Real
+integration requires a separately reviewed version compatibility decision,
+prompt transport, authentication and cancellation contract. Detection of either
+version must never open the native turn gate.
+
 ## Public input versus internal engine input
 
 The public parser defines:

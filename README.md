@@ -39,6 +39,11 @@ described in [Development](docs/DEVELOPMENT.md), then use `npm run tauri -- dev`
 The Native JV CLI mode only performs a bounded local `--version` check. Detection
 does not establish authentication or production health.
 
+Native Linux compilation and Debian/RPM packaging have been validated. Native
+GUI acceptance remains pending: this agent session cannot access the X11 display.
+See [Validation](docs/VALIDATION.md) for the distinction between compiled artifacts,
+mock IPC checks, browser checks and actual native runtime validation.
+
 ## Architecture
 
 ```text
@@ -77,7 +82,7 @@ test blocks every request outside loopback.
 
 See [Development](docs/DEVELOPMENT.md), [Security](docs/SECURITY.md),
 [Windows plan](docs/WINDOWS_PLAN.md) and [Validation](docs/VALIDATION.md) for commands,
-limitations and the recorded host build blocker. `package-lock.json` and
+limitations and the recorded native build/runtime results. `package-lock.json` and
 `Cargo.lock` pin dependency resolution. No release or installer is published.
 
 ## Security status

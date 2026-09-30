@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "Local main window: folder selection, version detection and guarded turn commands only.",
   "windows": ["main"],
-  "permissions": ["core:default", "allow-choose-workspace", "allow-detect-backend", "allow-run-turn", "allow-cancel-turn"]
+  "permissions": ["allow-choose-workspace", "allow-detect-backend", "allow-run-turn", "allow-cancel-turn"]
 }

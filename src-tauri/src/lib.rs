@@ -159,3 +159,6 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("JV Desktop could not initialize");
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests;

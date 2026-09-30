@@ -65,8 +65,13 @@ or instructions to open/write files.
 The production CSP permits local application assets and Tauri IPC, not remote
 scripts or network fetches. Only the local main window has application command
 permissions. Folder picking occurs through a custom Rust command; the frontend
-has no generic filesystem or shell plugin permission. Development CSP additionally
-permits the loopback Vite HMR connection and its injected development scripts.
+has no generic filesystem or shell plugin permission. The main capability grants
+only `allow-choose-workspace`, `allow-detect-backend`, `allow-run-turn` and
+`allow-cancel-turn`. Unused `core:default` permissions were removed during
+Milestone 2; direct IPC tests verify an ungranted core command is rejected.
+The dialog plugin is invoked from Rust, with no JavaScript dialog permission.
+Its transitive filesystem dependency does not grant frontend filesystem access.
+Development CSP additionally permits the loopback Vite HMR connection and its injected development scripts.
 
 ## Tests and production
 
