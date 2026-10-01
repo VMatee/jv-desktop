@@ -1,4 +1,4 @@
-# JV Desktop 0.1.0
+# JV Desktop 0.1.1
 
 A Linux desktop workspace for JV conversations: choose a project folder, set
 permissions, and follow commands, changed files and assistant replies in one window.
@@ -17,37 +17,39 @@ permissions, and follow commands, changed files and assistant replies in one win
 ## Install
 
 Download an x86_64 package and `SHA256SUMS` from
-[Releases](https://github.com/VMatee/jv-desktop/releases/tag/v0.1.0).
+[Releases](https://github.com/VMatee/jv-desktop/releases/tag/v0.1.1).
 Verify downloaded files in that directory:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-Stop if verification fails. Choose one format:
+Stop if verification fails. For a complete release download, `sha256sum -c SHA256SUMS`
+verifies all three packages and BUILD-INFO.json. v0.1.1 fixes the published filename/
+checksum mismatch in v0.1.0; application functionality is unchanged. Choose one format:
 
 **AppImage** — no system installation:
 
 ```sh
-chmod +x 'JV Desktop_0.1.0_amd64.AppImage'
-./'JV Desktop_0.1.0_amd64.AppImage'
+chmod +x 'JV-Desktop_0.1.1_amd64.AppImage'
+./'JV-Desktop_0.1.1_amd64.AppImage'
 ```
 
 If FUSE is unavailable, run with `--appimage-extract-and-run` instead. Do not
 run Desktop as root or disable its sandbox to work around a launch problem.
 
-**Debian/Ubuntu** — open `JV Desktop_0.1.0_amd64.deb` in your software installer,
+**Debian/Ubuntu** — open `JV-Desktop_0.1.1_amd64.deb` in your software installer,
 or have your system administrator install it with:
 
 ```sh
-sudo apt install './JV Desktop_0.1.0_amd64.deb'
+sudo apt install './JV-Desktop_0.1.1_amd64.deb'
 ```
 
-**RPM-based Linux** — open `JV Desktop-0.1.0-1.x86_64.rpm` in your software
+**RPM-based Linux** — open `JV-Desktop-0.1.1-1.x86_64.rpm` in your software
 installer, or use your distribution's package manager:
 
 ```sh
-sudo dnf install './JV Desktop-0.1.0-1.x86_64.rpm'
+sudo dnf install './JV-Desktop-0.1.1-1.x86_64.rpm'
 ```
 
 Launch **JV Desktop** from the applications menu, or run `jv-desktop`.

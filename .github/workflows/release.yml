@@ -31,7 +31,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+          version=$(node -p 'require("./package.json").version')
+          test "$GITHUB_REF_NAME" = "v$version"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
           gh api "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?head_sha=$GITHUB_SHA&event=push" > checks.json
           node -e 'const r=require("./checks.json").workflow_runs; if(!r.some(x=>x.head_branch==="main" && x.conclusion==="success")) process.exit(1)'
           rm checks.json
@@ -45,32 +48,55 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
           rustup default 1.98.1
       - run: npm ci
+      - name: Offline release filename and checksum round-trip tests
+        run: python3 -B -m unittest discover -s tests -p 'test_release*.py' -v
       - run: npm run tauri:check
       - run: npm run tauri:test
       - name: Build production bundles from tagged source
         run: npm run tauri -- build --bundles deb,rpm,appimage
       - name: Inspect and collect release assets
         run: |
-          dpkg-deb --info 'target/release/bundle/deb/JV Desktop_0.1.0_amd64.deb'
-          dpkg-deb --contents 'target/release/bundle/deb/JV Desktop_0.1.0_amd64.deb'
-          rpm -qip 'target/release/bundle/rpm/JV Desktop-0.1.0-1.x86_64.rpm'
-          rpm -qlp 'target/release/bundle/rpm/JV Desktop-0.1.0-1.x86_64.rpm'
-          file target/release/jv-desktop target/release/bundle/appimage/*.AppImage
+          dpkg-deb --info "target/release/bundle/deb/JV Desktop_${RELEASE_VERSION}_amd64.deb"
+          dpkg-deb --contents "target/release/bundle/deb/JV Desktop_${RELEASE_VERSION}_amd64.deb"
+          rpm -qip "target/release/bundle/rpm/JV Desktop-${RELEASE_VERSION}-1.x86_64.rpm"
+          rpm -qlp "target/release/bundle/rpm/JV Desktop-${RELEASE_VERSION}-1.x86_64.rpm"
+          file target/release/jv-desktop "target/release/bundle/appimage/JV Desktop_${RELEASE_VERSION}_amd64.AppImage"
           python3 scripts/release-assets.py
-          cd target/release-assets
+          cd "target/release-assets/$RELEASE_VERSION"
           sha256sum -c SHA256SUMS
+      - name: Require safe complete release inventory before publication
+        run: python3 -B scripts/release-assets.py --verify "target/release-assets/$RELEASE_VERSION"
       - name: Publish without replacing existing releases or assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" target/release-assets/* --verify-tag --latest \
-            --title "JV Desktop 0.1.0" --notes-file docs/releases/0.1.0.md
+          gh release create "$GITHUB_REF_NAME" "target/release-assets/$RELEASE_VERSION/"* --verify-tag --latest \
+            --title "JV Desktop $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md"
       - name: Verify published bytes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p .cache/published
-          gh release download "$GITHUB_REF_NAME" --dir .cache/published
-          cd .cache/published
-          sha256sum -c SHA256SUMS
-          cmp SHA256SUMS ../../target/release-assets/SHA256SUMS
+          mkdir -p .cache
+          for pass in 1 2; do
+            downloaded=$(mktemp -d "$GITHUB_WORKSPACE/.cache/published-${RELEASE_VERSION}-${pass}.XXXXXX")
+            gh release download "$GITHUB_REF_NAME" --dir "$downloaded"
+            python3 -B scripts/release-assets.py --verify "$downloaded"
+            (cd "$downloaded" && sha256sum -c SHA256SUMS)
+            cmp "$downloaded/SHA256SUMS" "target/release-assets/$RELEASE_VERSION/SHA256SUMS"
+            cmp "$downloaded/BUILD-INFO.json" "target/release-assets/$RELEASE_VERSION/BUILD-INFO.json"
+          done
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets' > .cache/published-assets.json
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          source = pathlib.Path('target/release-assets') / os.environ['RELEASE_VERSION']
+          assets = json.loads(pathlib.Path('.cache/published-assets.json').read_text())
+          assert len(assets) == len(list(source.iterdir()))
+          assert {a['name'] for a in assets} == {p.name for p in source.iterdir()}
+          for asset in assets:
+              path = source / asset['name']
+              assert asset['size'] == path.stat().st_size
+              expected = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+              if asset.get('digest'):
+                  assert asset['digest'] == expected
+              print(asset['name'], asset['size'], expected, 'API digest verified' if asset.get('digest') else 'API digest unavailable')
+          PY

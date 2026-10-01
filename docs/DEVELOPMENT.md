@@ -152,11 +152,23 @@ offline assurance. Never add credentials to this probe.
 
 Keep package.json, Cargo workspace, lockfiles and Tauri version consistent. Run
 the documented checks, commit validated source, then build all Linux bundles from
-that clean commit. `python3 scripts/release-assets.py` collects only three bundles
-plus SHA256SUMS and BUILD-INFO.json into ignored target/release-assets. Its tool
+that clean commit. `python3 scripts/release-assets.py` copies the three bundles to
+canonical filenames without spaces, plus SHA256SUMS and BUILD-INFO.json, under
+ignored `target/release-assets/<version>/`. Collection requires an empty output
+directory and preserves earlier versions. SHA256SUMS covers all bundles and
+BUILD-INFO.json; it cannot checksum itself. Its tool
 commands need the same Node PATH as the build. No reproducible-build certification
 is implied. CI builds independently from the exact tag; published hashes identify
 those runner artifacts and can differ from local acceptance bundles.
+
+Run `python3 -B -m unittest discover -s tests -p 'test_release*.py' -v` for the
+offline collection/download round-trip and filename/integrity rejection cases.
+Before upload, `python3 -B scripts/release-assets.py --verify DIRECTORY` checks
+the exact inventory, safe filenames, nonempty files, unique checksums and
+BUILD-INFO sizes/hashes. `sha256sum -c SHA256SUMS` must also pass in that directory.
+The tag workflow derives its version from package.json, requires matching main
+and green main CI, refuses an existing release, and verifies two fresh downloads
+without renaming files. Published SHA256SUMS must byte-match the generated file.
 
 Inspect/extract packages without modifying the development machine's package
 database. Test extracted executable/AppImage with isolated XDG paths and no network.

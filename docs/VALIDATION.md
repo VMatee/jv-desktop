@@ -1,5 +1,33 @@
 # Validation record
 
+## v0.1.1 release filename fix — 2026-10-01
+
+The reported v0.1.0 Linux release run36840098720 failed only at published-byte
+verification: GitHub changed spaces in uploaded package names to dots, while
+SHA256SUMS retained the original names. The v0.1.0 tag/release/assets are preserved.
+v0.1.1 changes release collection, version metadata and documentation only.
+
+The collector now copies bundles to `JV-Desktop` filenames without spaces under
+`target/release-assets/0.1.1/`. BUILD-INFO records those names, sizes, hashes,
+source commit and tool/runner information. SHA256SUMS covers the three packages
+and BUILD-INFO. The upload gate rejects unexpected/unsafe names, empty files,
+missing/duplicate checksums and size/hash mismatches. The version-derived workflow
+retains matching-main/green-CI/no-existing-release gates and published-byte checks,
+including two fresh downloads and API digests when provided by GitHub.
+
+Seven offline release tests passed, including collection into a download-like
+directory followed by `sha256sum -c SHA256SUMS`, without access to source bundle
+paths. All **27 frontend**, **17 Rust core/fixture**, **4 Tauri IPC** and **1 browser**
+tests passed, as did frontend build, rustfmt, Rust check/Clippy and native Tauri
+check. Application checks ran with Bubblewrap `--unshare-net` and isolated HOME.
+Workflow YAML and shell blocks parsed successfully. No new live acceptance,
+authentication, credential use or JV task was performed.
+
+Local build evidence is kept in ignored `.cache/release-011` and version-specific
+release output. Local artifacts are not evidence of successful GitHub publication;
+main CI, tag workflow and downloaded published bytes must be independently verified
+before calling v0.1.1 released. No reproducible-build certification is claimed.
+
 ## v0.1.0 release preparation — 2026-10-01
 
 Release baseline: `adec8b76e436a656080972925acb94a191957ea7`.
