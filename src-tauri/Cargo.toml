@@ -1,6 +1,9 @@
 [package]
 name = "jv-desktop"
 publish = false
+description = "Desktop workspace for JV CLI"
+authors = ["VMatee <VMatee@users.noreply.github.com>"]
+homepage = "https://github.com/VMatee/jv-desktop"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

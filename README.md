@@ -1,98 +1,117 @@
-# JV Desktop
+# JV Desktop 0.1.0
 
-A desktop workspace for conversations with JV: choose a project folder, set tool
-permissions, and follow structured activity alongside the conversation.
+A Linux desktop workspace for JV conversations: choose a project folder, set
+permissions, and follow commands, changed files and assistant replies in one window.
 
-**Offline-validated integration preview.** The demo works without a service.
-Linux native mode uses installed JV CLI>=0.4.9 through bridge protocol 1, with
-memory-only sign-in and isolated Desktop state. Production acceptance has not
-been performed. Windows shares the UI but has no native JV CLI backend yet.
+## Requirements
 
-## What works
+- Linux x86_64 with a graphical desktop; built and tested on Ubuntu 22.04.
+- **[JV CLI 0.4.9 or newer](https://github.com/VMatee/jv-cli/releases)** installed
+  separately using its official installation/upgrade instructions and available
+  as `jvcli` on your desktop session's PATH. Desktop neither bundles nor updates it.
+- A JV account for native conversations. Offline demo needs no account.
+- Debian/RPM packages require GTK3, WebKitGTK4.1 and the dependencies listed by
+  your package manager. AppImage includes its desktop libraries but still depends
+  on compatible Linux system libraries; it is not a universal Linux guarantee.
 
-- Tauri 2 shell with a native folder picker and conservative path validation.
-- React chat with Unicode/Thai text, IME-safe Enter, Shift+Enter, and Stop in demo.
-- Read-only/workspace-write controls and explicit tool-network permissions.
-- Bounded JSONL normalization, activity, command results and changed-file events.
-- A frontend `JvBackend` interface independent of Tauri transport details.
-- A standalone Rust process core tested with an offline fake executable:
-  argument vectors, explicit cwd, stdin, limits, timeouts and Linux process groups.
-- No terminal, telemetry, password storage or project-file editing by the UI.
+## Install
 
-## Quick start: no JV account or service required
-
-Use Node **24.15+ within the 24 LTS line** (validated with 24.21.0).
+Download an x86_64 package and `SHA256SUMS` from
+[Releases](https://github.com/VMatee/jv-desktop/releases/tag/v0.1.0).
+Verify downloaded files in that directory:
 
 ```sh
-npm ci
-npm run dev
+sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-Open the loopback URL printed by Vite. **Offline demo** is the default. In browser
-preview, **Open Folder** explicitly selects a virtual `/demo/workspace`; it does
-not access your disk. In the Tauri shell the same button opens a native folder
-picker. The demo never reads or changes the selected folder.
+Stop if verification fails. Choose one format:
 
-For the native desktop shell, install Rust 1.98+ and the platform prerequisites
-described in [Development](docs/DEVELOPMENT.md), then use `npm run tauri -- dev`.
-The Native JV CLI mode detects the version locally and starts an unauthenticated
-bridge when a folder is selected. Sign in is an explicit service-contact action. Detection
-does not establish authentication or production health.
-
-Native Linux compilation and Debian/RPM/AppImage packaging have been validated.
-The real X11/WebView shell, folder picker, Thai Unicode composition and offline
-conversation/Stop were exercised. Remaining GUI checks are listed in
-[Manual acceptance](docs/MANUAL_GUI_ACCEPTANCE.md).
-See [Validation](docs/VALIDATION.md) for the distinction between compiled artifacts,
-mock IPC checks, browser checks and actual native runtime validation.
-
-## Architecture
-
-```text
-React chat + activity
-  → JvBackend interface + normalized DesktopEvent
-    → offline mock, or Tauri commands/channels
-      → Rust process adapter
-        → external installed jvcli bridge --stdio
-          → existing JV service (no server changes)
-```
-
-JV Desktop is independent from `VMatee/jv-cli`. No CLI source is embedded or
-copied. Existing terminal CLI commands remain unchanged. See the
-[CLI contract](docs/CLI_CONTRACT.md) and [Architecture](docs/ARCHITECTURE.md) for
-workspace binding, state isolation, memory-only authentication and local Stop.
-
-## Checks
+**AppImage** — no system installation:
 
 ```sh
-npm test
-npm run build
-npm run rust:fmt
-npm run rust:check
-npm run rust:test
-npm run rust:clippy
-npm run browser:install
-npm run test:e2e
-npm run tauri:check
+chmod +x 'JV Desktop_0.1.0_amd64.AppImage'
+./'JV Desktop_0.1.0_amd64.AppImage'
 ```
 
-Frontend and process-core checks do not need a JV account or GUI libraries. The
-last command requires native Tauri development libraries. All subprocess tests
-invoke the **fake** executable, never real `jvcli exec` or `resume`. The browser
-test blocks every request outside loopback.
+If FUSE is unavailable, run with `--appimage-extract-and-run` instead. Do not
+run Desktop as root or disable its sandbox to work around a launch problem.
 
-See [Development](docs/DEVELOPMENT.md), [Security](docs/SECURITY.md),
-[Windows plan](docs/WINDOWS_PLAN.md) and [Validation](docs/VALIDATION.md) for commands,
-limitations and the recorded native build/runtime results. `package-lock.json` and
-`Cargo.lock` pin dependency resolution. No release or installer is published.
+**Debian/Ubuntu** — open `JV Desktop_0.1.0_amd64.deb` in your software installer,
+or have your system administrator install it with:
 
-## Security status
+```sh
+sudo apt install './JV Desktop_0.1.0_amd64.deb'
+```
 
-Native submission requires a compatible bridge, chosen workspace and explicit sign-in.
-Passwords are memory-only and never persisted or put in argv/environment. All chat
-state stays in memory and output is plaintext. Do not put credentials into chat.
-Tool-network denial does not disable the authenticated service connection.
+**RPM-based Linux** — open `JV Desktop-0.1.0-1.x86_64.rpm` in your software
+installer, or use your distribution's package manager:
 
-Linux is the first backend. Windows-native JV CLI, WSL, Desktop session resume,
-images and integrated terminals remain deferred. Live production acceptance is
-separately authorized work; ordinary tests must always use fake dependencies.
+```sh
+sudo dnf install './JV Desktop-0.1.0-1.x86_64.rpm'
+```
+
+Launch **JV Desktop** from the applications menu, or run `jv-desktop`.
+Release packages are unsigned; SHA256 verifies file integrity, not a signing identity.
+
+## First run
+
+1. Install JV CLI, then confirm `jvcli --version` reports 0.4.9 or newer.
+2. Open JV Desktop. **Offline demo** is the default and never contacts JV.
+3. Select **Native JV CLI**, then **Open Folder** and choose a dedicated project.
+   If you selected a demo folder first, select it again after switching modes.
+4. Check that JV CLI is detected. Older versions require an upgrade; there is no
+   fallback that puts prompts into command-line arguments.
+5. Enter your username and password, leaving the service URL at your usual JV
+   endpoint. **Choose permissions before pressing Sign in**:
+   - **Read only**: tool network disabled.
+   - **Workspace write**, Tool network checked: edits and tool networking allowed.
+   - **Workspace write**, Tool network unchecked: edits allowed, tool network denied.
+6. Press **Sign in** once. This authenticates and starts the session with that
+   policy. When **Session ready** appears, type a task and send it.
+
+Tool Network controls model tools, **not login/service connectivity**. Session
+permissions are fixed; reopen the folder to choose another policy. Enter sends,
+Shift+Enter adds a newline, and active IME composition does not submit.
+
+If the bridge exits or sign-in fails, reopen the folder and sign in again. Raw
+server/child errors are not displayed. Detection does not prove service health.
+
+## Stop, privacy and state
+
+Execution follows the chosen workspace and CLI sandbox policy. Selecting a folder
+does not edit project files. Passwords are memory-only: no remember-password,
+frontend storage, password file, argv, environment or password logging.
+
+**Stop stops local work. A submitted remote job may continue and its state may be
+unknown.** Do not immediately duplicate cancelled work without checking its state.
+
+Desktop uses `$XDG_DATA_HOME/com.openjvspace.desktop/jvcli-state`, normally
+`~/.local/share/com.openjvspace.desktop/jvcli-state/`. This is separate from terminal
+CLI state. Session/runtime data may persist there; chat UI state is in memory.
+See [Security](docs/SECURITY.md) for boundaries and limitations.
+
+## Upgrade and uninstall
+
+Close Desktop first. Replace the AppImage, or install a newer package through the
+same package manager. No automatic updater is included.
+
+To uninstall, delete the AppImage you downloaded, or remove package `jv-desktop`
+through your software manager (`sudo apt remove jv-desktop` or
+`sudo dnf remove jv-desktop`). Removing the app does **not** uninstall JV CLI,
+delete your projects or automatically erase Desktop's user data. Review/back up
+its application-data directory before manually removing it. Never delete terminal
+CLI state as part of Desktop removal.
+
+## Current limits
+
+Linux native bridge execution is supported and controlled end-to-end acceptance
+has passed. Windows Desktop compilation is checked in CI, but its native JV CLI
+backend is **not supported yet**. Bridge images, Desktop session resume, WSL,
+integrated terminals and guaranteed remote cancellation are not included.
+
+## Development
+
+Tauri 2 + React/TypeScript + Rust. No CLI source is embedded. See
+[Development](docs/DEVELOPMENT.md), [Architecture](docs/ARCHITECTURE.md),
+[Validation](docs/VALIDATION.md) and [Windows plan](docs/WINDOWS_PLAN.md).
+Ordinary tests use fake executables and must not contact production.

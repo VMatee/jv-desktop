@@ -35,6 +35,5 @@ exec/resume and their JSON modes remain separate, unchanged interfaces.
 The protocol is documented in the independent CLI repository's
 `docs/BRIDGE_PROTOCOL.md`. Desktop uses allowlisted normalized bridge events,
 not raw engine events. Cancellation is local-only; remote state remains unknown.
-Current Desktop does not expose bridge resume, new-thread or images. No live
-production compatibility acceptance has yet been performed; the next acceptance
-must be separately authorized and controlled.
+Current Desktop does not expose bridge resume, new-thread or images. Controlled Linux acceptance passed using CLI 0.4.9. It is not repeated by
+release tests; any further live work needs separate authorization.

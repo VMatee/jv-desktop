@@ -121,7 +121,9 @@ A separate Windows step checks the Tauri crate with the runner's MSVC tooling.
 It validates the desktop shell's build, not native Windows JV functionality.
 Linux full GUI compilation requires a separately provisioned runner. Actions
 use pinned revisions, a read-only repository token with credential persistence
-disabled, and no JV credentials/deploy keys. There is no release workflow.
+disabled, and no JV credentials/deploy keys. The tag-only Linux release workflow requires successful main checks, builds on
+Ubuntu 22.04, and publishes packages/checksums using the scoped GitHub token.
+It does not install JV CLI or make JV service calls.
 
 ## Before publishing
 
@@ -145,3 +147,19 @@ node scripts/cargo.mjs run -p jv-desktop-process --example bridge_probe --locked
 The example resolves the fixed `jvcli` name, checks version/readiness and sends
 shutdown only. It has no login/turn code. Use a network namespace for independent
 offline assurance. Never add credentials to this probe.
+
+## Release preparation
+
+Keep package.json, Cargo workspace, lockfiles and Tauri version consistent. Run
+the documented checks, commit validated source, then build all Linux bundles from
+that clean commit. `python3 scripts/release-assets.py` collects only three bundles
+plus SHA256SUMS and BUILD-INFO.json into ignored target/release-assets. Its tool
+commands need the same Node PATH as the build. No reproducible-build certification
+is implied. CI builds independently from the exact tag; published hashes identify
+those runner artifacts and can differ from local acceptance bundles.
+
+Inspect/extract packages without modifying the development machine's package
+database. Test extracted executable/AppImage with isolated XDG paths and no network.
+Package-manager install/remove instructions are user operations, not automated
+permission to use sudo on a developer machine. No custom install/remove hooks or
+user-state deletion are included. Close the app before upgrading/removing it.

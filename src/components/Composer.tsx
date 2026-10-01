@@ -20,10 +20,10 @@ export function Composer({ permissionLocked = false, prompt, permissions, busy, 
           <option value="read-only">Read only</option><option value="workspace-write">Workspace write</option>
         </select>
       </label>
-      <label className="network-control"><input type="checkbox" checked={permissions.network}
+      <label className="network-control" title="Tool networking controls model tools, not login connectivity."><input type="checkbox" checked={permissions.network}
         disabled={busy || permissionLocked || permissions.access === 'read-only'}
         onChange={(e) => onPermissions({ ...permissions, network: e.target.checked })} />Tool network</label>
-      <span className="permission-note">{permissionLocked ? 'Session permissions fixed · reopen folder to change' : 'Permissions apply to the session'}</span>
+      <span className="permission-note">{permissionLocked ? 'Session permissions fixed · reopen folder to change' : 'Tool network applies to tools, not sign-in'}</span>
     </div>
     <form onSubmit={(e) => { e.preventDefault(); if (canSend && !composing.current) onSend(); }}>
       <label className="sr-only" htmlFor="message">Message JV</label>

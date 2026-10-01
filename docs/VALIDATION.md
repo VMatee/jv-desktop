@@ -1,5 +1,30 @@
 # Validation record
 
+## v0.1.0 release preparation — 2026-10-01
+
+Release baseline: `adec8b76e436a656080972925acb94a191957ea7`.
+Ubuntu and Windows checks, including Windows Tauri compilation, were independently
+confirmed green in Actions run36831439975. No new live task/authentication is part
+of release preparation. The previously completed controlled Linux acceptance
+proved authentication/session creation, three normal turns (inspection, same-session
+follow-up, exact33-byte disposable write), local cancellation, owned-child shutdown
+and lock release. After cancellation remote job state remained unknown; no health
+turn was submitted. No source fix was needed. Acceptance workspace evidence remains
+local and no account/job identifiers are published here.
+
+The release keeps version0.1.0 across npm, Cargo, Tauri and the visible version label.
+Changes are limited to first-run/error guidance, Linux package metadata, public
+install/uninstall documentation and tag-only publication. Protocol/supervisor, CSP,
+capabilities and dependency versions are unchanged.
+
+Release evidence is recorded in `BUILD-INFO.json` and `SHA256SUMS` attached to the
+release, including exact commit, tools, OS, filenames, sizes and hashes. Local
+ignored evidence lives in `.cache/release-010`. CI builds from the exact tagged
+commit on Ubuntu22.04; local and CI hashes may differ. No deterministic-build
+certification is claimed. Package inspection/extraction does not certify root
+package-manager transactions across every distribution. No host package install,
+uninstall, system modification, credential retrieval or service call is required.
+
 ## Bridge integration — 2026-10-01
 
 Starting Desktop main: `08d55bb9ec3df356946985b28822a4c8fd7325a4`.

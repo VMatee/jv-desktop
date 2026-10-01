@@ -1,3 +1,4 @@
+import packageInfo from '../package.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityFeed } from './components/ActivityFeed';
 import type { Activity } from './components/ActivityFeed';
@@ -95,25 +96,26 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       <div className="header-controls"><label className="sr-only" htmlFor="backend-mode">Backend mode</label>
         <select id="backend-mode" value={mode} disabled={busy || choosing || signingIn} onChange={(e) => { void backends.native.close?.().catch(() => {}); setSignedIn(false); setPassword(''); setMode(e.target.value as BackendMode); setWorkspace(null); setError(null); setMessages([]); setActivities([]); setOutcome(''); }}>
           <option value="demo">Offline demo</option><option value="native">Native JV CLI</option>
-        </select><span className="preview-label">FOUNDATION</span></div>
+        </select><span className="preview-label">v{packageInfo.version}</span></div>
     </header>
     <div className="workspace-bar"><span className="folder-icon" aria-hidden="true">▱</span><div className="workspace-location"><span>WORKSPACE</span><p title={workspace ?? undefined}>{workspace ?? 'Choose a project folder to begin'}</p></div>
       <button className="secondary" onClick={() => void chooseWorkspace()} disabled={busy || choosing || signingIn}>{choosing ? 'Choosing…' : 'Open Folder'}<span aria-hidden="true">↗</span></button>
     </div>
     <div className="backend-banner"><span className="status-dot" /><strong>{checking ? 'Checking backend…' : mode === 'demo' ? 'Offline preview' : `JV CLI: ${status?.availability ?? 'unavailable'}`}</strong><span>{status?.detail}</span>
+      {mode === 'native' && !status?.canRun && <span>Requires JV CLI 0.4.9+. Install from github.com/VMatee/jv-cli/releases, then Check again.</span>}
       {mode === 'native' && <button className="text-button" onClick={() => void check()} disabled={checking || busy}>Check again</button>}
     </div>
     {mode === 'native' && workspace && status?.canRun && !signedIn && <form className="auth-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void login(); }}>
       <label>Username<input value={username} onChange={(e) => setUsername(e.target.value)} disabled={signingIn} autoComplete="off" /></label>
       <label>Service URL<input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} disabled={signingIn} /></label>
       <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={signingIn} autoComplete="new-password" /></label>
-      <button className="primary" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in…' : 'Sign in'}</button>
-      <small>Sign-in contacts the selected service. Password is held in memory only. Choose permissions before signing in.</small>
+      <button className="primary" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in / starting session…' : 'Sign in'}</button>
+      <small>Sign-in contacts the selected service. Password is held in memory only. Choose permissions below first; signing in also starts your workspace session.</small>
     </form>}
-    <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : 'Native preview'}</span></div>
+    <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : signedIn ? 'Session ready' : 'Sign-in required'}</span></div>
       <Conversation messages={messages} busy={busy} demo={mode === 'demo'} />
       {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
-      <div className="turn-outcome" role="status">{outcome || (!workspace ? 'Select a workspace before sending a message.' : '')}</div>
+      <div className="turn-outcome" role="status">{outcome || (busy ? 'Turn running…' : signingIn ? 'Signing in and starting your workspace session…' : !workspace ? 'Choose a folder. Select Native JV CLI to connect, or try the offline demo.' : mode === 'native' ? signedIn ? 'Session ready. Send a task when you are ready.' : 'Choose permissions, then sign in to start a session.' : 'Offline demo ready. No account needed.')}</div>
       <Composer permissionLocked={mode === 'native' && (signedIn || signingIn)} prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
     </div><ActivityFeed activities={activities} busy={busy} /></main>
     <footer className="app-footer"><span>Local workspace · Explicit permissions</span><span>{mode === 'demo' ? 'No service calls. No file changes.' : 'Bridge protocol 1 · Passwords are not saved.'}</span></footer>

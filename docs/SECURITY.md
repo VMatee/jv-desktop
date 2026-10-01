@@ -1,7 +1,6 @@
 # Security boundaries
 
-Native Linux execution now uses the reviewed CLI 0.4.9 bridge. Live acceptance has
-**not** been performed. The default mode remains Offline demo. Opening native mode
+Native Linux execution now uses the reviewed CLI 0.4.9 bridge. Controlled Linux live acceptance passed before v0.1.0 release preparation. The default mode remains Offline demo. Opening native mode
 only detects the executable; selecting a folder starts an unauthenticated bridge.
 An explicit Sign in action is required before any authentication/session request.
 

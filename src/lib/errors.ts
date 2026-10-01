@@ -8,7 +8,7 @@ export const errorMessages: Record<ErrorCategory, string> = {
   'permission-conflict': 'Read only cannot be combined with tool networking.',
   'authentication-required': 'Sign-in is required or was unsuccessful. Reopen the workspace and sign in again.',
   'unsupported-platform': 'A native JV CLI backend is not supported on this platform yet. The offline demo is available.',
-  'process-failed': 'JV exited unsuccessfully. No raw process diagnostics have been displayed.',
+  'process-failed': 'JV could not complete the operation or the bridge exited. Reopen the folder and sign in again.',
   timeout: 'The local process timed out and was stopped.',
   'stream-limit': 'The process output exceeded the safety limit and was stopped.',
   internal: 'The operation could not be completed. Please try again.',

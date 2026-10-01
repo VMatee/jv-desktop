@@ -1,0 +1,76 @@
+name: Linux release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      CARGO_HOME: ${{ github.workspace }}/.cache/cargo
+      RUSTUP_HOME: ${{ github.workspace }}/.tools/rustup
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Require matching version, green main checks, and no existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?head_sha=$GITHUB_SHA&event=push" > checks.json
+          node -e 'const r=require("./checks.json").workflow_runs; if(!r.some(x=>x.head_branch==="main" && x.conclusion==="success")) process.exit(1)'
+          rm checks.json
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > releases.json
+          node -e 'if(require("./releases.json").some(x=>x.tag_name===process.env.GITHUB_REF_NAME)) process.exit(1)'
+          rm releases.json
+      - name: Provision ephemeral Linux build runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.98.1
+      - run: npm ci
+      - run: npm run tauri:check
+      - run: npm run tauri:test
+      - name: Build production bundles from tagged source
+        run: npm run tauri -- build --bundles deb,rpm,appimage
+      - name: Inspect and collect release assets
+        run: |
+          dpkg-deb --info 'target/release/bundle/deb/JV Desktop_0.1.0_amd64.deb'
+          dpkg-deb --contents 'target/release/bundle/deb/JV Desktop_0.1.0_amd64.deb'
+          rpm -qip 'target/release/bundle/rpm/JV Desktop-0.1.0-1.x86_64.rpm'
+          rpm -qlp 'target/release/bundle/rpm/JV Desktop-0.1.0-1.x86_64.rpm'
+          file target/release/jv-desktop target/release/bundle/appimage/*.AppImage
+          python3 scripts/release-assets.py
+          cd target/release-assets
+          sha256sum -c SHA256SUMS
+      - name: Publish without replacing existing releases or assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" target/release-assets/* --verify-tag --latest \
+            --title "JV Desktop 0.1.0" --notes-file docs/releases/0.1.0.md
+      - name: Verify published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .cache/published
+          gh release download "$GITHUB_REF_NAME" --dir .cache/published
+          cd .cache/published
+          sha256sum -c SHA256SUMS
+          cmp SHA256SUMS ../../target/release-assets/SHA256SUMS
