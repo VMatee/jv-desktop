@@ -1,87 +1,69 @@
 # Security boundaries
 
-This foundation intentionally has no live task submission. Rust's native gate
-returns a sanitized blocker before spawning exec/resume. UI disabling is a second
-layer, not the security boundary. There is no environment switch or hidden flag
-that enables native submission.
+Native Linux execution now uses the reviewed CLI 0.4.9 bridge. Live acceptance has
+**not** been performed. The default mode remains Offline demo. Opening native mode
+only detects the executable; selecting a folder starts an unauthenticated bridge.
+An explicit Sign in action is required before any authentication/session request.
 
-## Repository isolation
+## Process and workspace authority
 
-Desktop is an independent repository. Do not modify sibling CLI/platform trees,
-copy CLI implementation, change production services, or install global tools as
-part of Desktop development. Build output, dependency caches, local toolchains
-and temporary test paths are ignored and remain inside this repository. Do not
-run destructive Git cleanup or force pushes. Preserve existing work.
+Only Rust selects the fixed `jvcli` executable from absolute PATH entries and
+invokes `bridge --stdio` with an argument vector and explicit validated cwd.
+Frontend requests cannot select executable, environment, shell, PID or engine
+arguments. No shell interpolation, terminal scraping, PTY or argv prompt exists.
+The old exec gate remains closed and is not a fallback.
 
-## Child execution and workspace trust
+The selected directory must exist and must not be filesystem root, home root or
+the executable directory. The CLI adds its own authoritative workspace checks.
+Selection creates no project files. Bridge state uses the application's own
+private data directory; terminal CLI accounts/sessions are not opened by Desktop.
+Installed executables are trusted native code, not sandboxed by version detection.
 
-- Native process APIs use an argument vector and explicit cwd. No `sh -c`,
-  `bash -c`, PowerShell interpolation, embedded shell or arbitrary UI executable.
-- Prompt text is never executed. The fixture reads it from stdin. Current public
-  JV CLI requires positional prompt arguments; Desktop blocks that path rather
-  than silently exposing prompts in a process listing.
-- Folder selection performs metadata/canonicalization checks only. It neither
-  edits nor creates project files. The CLI remains responsible for authoritative
-  write/sandbox checks when a future native path is enabled.
-- PATH entries must be absolute for discovery. An installed executable is still
-  trusted native code: `--version` is safe for the inspected official CLI, not a
-  sandbox for an arbitrary replacement. Users must install a trusted CLI.
-- Linux cancellation owns a child process group, never an arbitrary supplied PID.
-  Detached sessions can escape it. Real CLI cancellation and remote-job state
-  require further review; Stop currently stops only the in-memory demo in the UI.
+## Memory-only sign-in
 
-## Secrets and authentication
+Explicit user input travels React memory → Tauri IPC → Rust memory → bridge stdin
+`auth.login`. Password is never stored in frontend storage, files, configuration,
+logs, argv or child environment. Frontend state is cleared after success/failure;
+request buffers/references are discarded. This is best-effort lifetime reduction,
+not a claim of secure erasure of JavaScript/Rust/Python allocations or crash dumps.
+The bridge owns the bearer token and logout. Desktop neither receives nor stores
+it. There is no account discovery, telemetry, persistent chat or diagnostic export.
+Do not put credentials in ordinary chat text or Vite build variables.
 
-No password form, password persistence, token cache, account discovery, telemetry
-or raw child-environment logging exists. No localStorage/sessionStorage is used.
-Chat/activity state stays in memory and is discarded when the app closes. Do not
-enter credentials into prompts; this is not a secret manager.
+The child uses a minimal environment allowlist, excluding `JV_API_PASSWORD`,
+loader overrides and credential variables. Raw stderr is bounded and discarded;
+errors crossing IPC are static categories. Known event fields are allowlisted and
+bounded, unknown fields discarded. Tool/model content remains untrusted user data;
+this is not a general secret detector for arbitrary text users ask to display.
 
-The runner uses `env_clear` and a minimal allowlist. It does not inherit
-`JV_API_PASSWORD`, authorization variables, SSH state, loader overrides or proxy
-credentials. It never reads account files or secret sources. Raw subprocess
-stderr is bounded and discarded, and only static error categories cross IPC.
-Child stdout is untrusted content; it can contain workspace data, so it is never
-logged or persisted by Desktop. Future diagnostic export needs a separate review.
+## Protocol, UI and capabilities
 
-The inspected CLI expects `JV_API_PASSWORD` for noninteractive authentication.
-There is no safe shortcut in this foundation. A future sign-in design must be
-explicitly user-entered, memory-only, redacted, excluded from arguments/logs, and
-delivered only through a reviewed narrow child environment or bridge protocol.
-It also needs lifecycle, zeroization limitations, crash handling and remote-job
-review. Never add a `.env` password workaround. Never put secrets in `VITE_*`:
-Vite embeds those values into frontend assets.
+See [Architecture](ARCHITECTURE.md) for byte/count/deadline bounds. Malformed known
+frames, protocol mismatch, broken pipes and nonzero exits fail safely. Only bridge
+protocol 1 with CLI>=0.4.9 is accepted. No old CLI fallback exists.
 
-## Untrusted JSONL and rendering
+Plain React text rendering escapes HTML. Changed paths are labels only and never
+opened, resolved or executed on receipt. No eval or raw-HTML rendering is used.
+CSP permits bundled assets and IPC; no remote frontend scripts or fetches.
+Development CSP additionally permits loopback Vite HMR.
 
-64 KiB byte framing occurs before JSON parsing. Total streams, event counts,
-display fields and UI histories are capped. Invalid UTF-8, malformed JSON,
-unexpected shapes and unknown event types produce static diagnostics. No eval,
-dynamic JavaScript, object spreading of subprocess data into UI props, terminal
-control interpretation, unsafe Markdown or `dangerouslySetInnerHTML` is used.
-Plaintext React rendering escapes HTML; changed-file paths are labels, not links
-or instructions to open/write files.
+The main window has only custom commands: choose_workspace, detect_backend,
+open_bridge, close_bridge, authenticate, run_turn and cancel_turn. There is no
+core:default, generic filesystem, JavaScript dialog or shell capability. The
+native dialog is invoked in Rust. Its transitive filesystem crate grants no
+frontend filesystem authority. Rust remains the sole process entry point.
 
-The production CSP permits local application assets and Tauri IPC, not remote
-scripts or network fetches. Only the local main window has application command
-permissions. Folder picking occurs through a custom Rust command; the frontend
-has no generic filesystem or shell plugin permission. The main capability grants
-only `allow-choose-workspace`, `allow-detect-backend`, `allow-run-turn` and
-`allow-cancel-turn`. Unused `core:default` permissions were removed during
-Milestone 2; direct IPC tests verify an ungranted core command is rejected.
-The dialog plugin is invoked from Rust, with no JavaScript dialog permission.
-Its transitive filesystem dependency does not grant frontend filesystem access.
-Development CSP additionally permits the loopback Vite HMR connection and its injected development scripts.
+Stop sends turn.cancel and reports **local=true, remote_state=unknown**. Shutdown
+is cooperative first, followed by bounded termination of the owned bridge only.
+A remote job may continue; forced local termination cannot prove remote or
+escaped-descendant cancellation.
 
-## Tests and production
+## Development and isolation
 
-Ordinary tests must never invoke real `jvcli exec` or `resume`, call
-`ai.openjvspace.com`, consume scenarios, run migrations, or use an account/password.
-The Rust test binary uses only stdio, timers and synthetic events; it contains no
-HTTP client. Frontend unit tests reject fetch/XHR, and browser tests abort all
-non-loopback requests. Native tests use an absolute Cargo-provided fixture path.
-CI needs no JV secrets or deploy key and cannot publish a release.
-
-Separately authorized live acceptance is a later activity, after the execution
-gate is reviewed. Offline checks and backend detection are not production
-acceptance, authentication, remote cancellation or service-health evidence.
+Repositories and histories remain independent; never copy CLI source into Desktop.
+No production calls, real credentials or live scenarios in ordinary tests. Tests
+use deterministic fake bridge/engine binaries and synthetic sentinel passwords.
+Frontend tests reject fetch/XHR; browser acceptance blocks non-loopback traffic.
+Final local fixture tests run in a Bubblewrap network namespace. The only actual
+installed CLI smoke sends ready/shutdown with no authentication. Live acceptance
+requires separate authorization. Build/runtime caches remain ignored in this repo.

@@ -1,7 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local main window: folder selection, version detection and guarded turn commands only.",
-  "windows": ["main"],
-  "permissions": ["allow-choose-workspace", "allow-detect-backend", "allow-run-turn", "allow-cancel-turn"]
+  "description": "Main window: selected workspace, fixed JV bridge and memory-only authentication.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-choose-workspace",
+    "allow-detect-backend",
+    "allow-run-turn",
+    "allow-cancel-turn",
+    "allow-open-bridge",
+    "allow-close-bridge",
+    "allow-authenticate"
+  ]
 }

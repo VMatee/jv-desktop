@@ -3,11 +3,10 @@
 A desktop workspace for conversations with JV: choose a project folder, set tool
 permissions, and follow structured activity alongside the conversation.
 
-**Foundation preview, not a production client.** The offline demo works today.
-Native Linux CLI detection and a tested process adapter are implemented, but
-native turn submission is deliberately disabled pending secure authentication
-and prompt transport. Windows has the shared UI and an honest unsupported-backend
-state; there is no native Windows JV CLI integration yet.
+**Offline-validated integration preview.** The demo works without a service.
+Linux native mode uses installed JV CLI>=0.4.9 through bridge protocol 1, with
+memory-only sign-in and isolated Desktop state. Production acceptance has not
+been performed. Windows shares the UI but has no native JV CLI backend yet.
 
 ## What works
 
@@ -36,7 +35,8 @@ picker. The demo never reads or changes the selected folder.
 
 For the native desktop shell, install Rust 1.98+ and the platform prerequisites
 described in [Development](docs/DEVELOPMENT.md), then use `npm run tauri -- dev`.
-The Native JV CLI mode only performs a bounded local `--version` check. Detection
+The Native JV CLI mode detects the version locally and starts an unauthenticated
+bridge when a folder is selected. Sign in is an explicit service-contact action. Detection
 does not establish authentication or production health.
 
 Native Linux compilation and Debian/RPM/AppImage packaging have been validated.
@@ -53,15 +53,14 @@ React chat + activity
   → JvBackend interface + normalized DesktopEvent
     → offline mock, or Tauri commands/channels
       → Rust process adapter
-        → external installed jvcli (native turns currently blocked)
+        → external installed jvcli bridge --stdio
           → existing JV service (no server changes)
 ```
 
 JV Desktop is independent from `VMatee/jv-cli`. No CLI source is embedded or
-copied. Existing CLI commands remain unchanged. See the inspected
-[CLI contract](docs/CLI_CONTRACT.md) for why public `exec` cannot safely be treated
-as a stdin protocol yet, and [Architecture](docs/ARCHITECTURE.md) for the future
-`jvcli bridge --stdio` migration boundary.
+copied. Existing terminal CLI commands remain unchanged. See the
+[CLI contract](docs/CLI_CONTRACT.md) and [Architecture](docs/ARCHITECTURE.md) for
+workspace binding, state isolation, memory-only authentication and local Stop.
 
 ## Checks
 
@@ -89,12 +88,11 @@ limitations and the recorded native build/runtime results. `package-lock.json` a
 
 ## Security status
 
-Native submission fails closed in Rust, even if frontend controls are bypassed.
-There is no password UI or password persistence. Do not put credentials into chat
-messages. All chat state stays in memory, and output is rendered as plaintext.
-Tool networking is separate from the service connection: `--no-network` is not
-a promise that a future authenticated native turn will be offline.
+Native submission requires a compatible bridge, chosen workspace and explicit sign-in.
+Passwords are memory-only and never persisted or put in argv/environment. All chat
+state stays in memory and output is plaintext. Do not put credentials into chat.
+Tool-network denial does not disable the authenticated service connection.
 
-Linux is the first intended executable backend. Windows-native JV CLI, optional
-WSL compatibility, session resume, a reviewed live sign-in flow, and integrated
-terminals are later milestones, not capabilities of this preview.
+Linux is the first backend. Windows-native JV CLI, WSL, Desktop session resume,
+images and integrated terminals remain deferred. Live production acceptance is
+separately authorized work; ordinary tests must always use fake dependencies.

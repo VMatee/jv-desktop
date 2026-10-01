@@ -66,3 +66,33 @@ describe('IME-safe composer', () => {
     fireEvent.keyDown(input, { key: 'Enter' }); expect(send).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('memory-only bridge sign-in', () => {
+  it('requires explicit sign-in, clears password on failure, locks policy after success', async () => {
+    const authenticate = vi.fn().mockRejectedValueOnce('authentication-required').mockResolvedValueOnce(undefined);
+    const native: JvBackend = {
+      detectBackend: async () => ({ availability: 'detected', canRun: true, detail: 'JV CLI 0.4.9' }),
+      chooseWorkspace: async () => '/synthetic/workspace', authenticate,
+      runTurn: vi.fn(async (_request, event) => { event({type:'run-finished',outcome:'cancelled'}); }), cancelTurn: vi.fn(),
+    };
+    render(<App backends={{demo:new MockBackend(async()=>'/demo',0),native}} />);
+    fireEvent.change(screen.getByLabelText('Backend mode'), {target:{value:'native'}});
+    await screen.findByText('JV CLI: detected');
+    fireEvent.click(screen.getByRole('button',{name:/Open Folder/}));
+    const password = await screen.findByLabelText('Password') as HTMLInputElement;
+    fireEvent.change(screen.getByLabelText('Username'), {target:{value:'synthetic'}});
+    fireEvent.change(screen.getByLabelText('Service URL'), {target:{value:'http://127.0.0.1:9'}});
+    fireEvent.change(password, {target:{value:'TEST_PASSWORD_DO_NOT_LEAK'}});
+    expect(authenticate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
+    await waitFor(()=>expect(password.value).toBe(''));
+    expect(sessionStorage.length).toBe(0); expect(localStorage.length).toBe(0);
+    fireEvent.change(password, {target:{value:'TEST_PASSWORD_DO_NOT_LEAK'}});
+    fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
+    await waitFor(()=>expect(screen.queryByLabelText('Password')).toBeNull());
+    expect((screen.getByLabelText('Workspace permission') as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Message JV'), {target:{value:'ไทย'}});
+    fireEvent.click(screen.getByRole('button',{name:/Send message/}));
+    expect(await screen.findByText(/Remote job state is unknown/)).toBeTruthy();
+  });
+});

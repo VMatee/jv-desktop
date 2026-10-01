@@ -18,6 +18,11 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   const [checking, setChecking] = useState(false);
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [username, setUsername] = useState('');
+  const [baseUrl, setBaseUrl] = useState('https://ai.openjvspace.com');
+  const [password, setPassword] = useState('');
   const [prompt, setPrompt] = useState('');
   const [permissions, setPermissions] = useState<Permissions>({ access: 'read-only', network: false });
   const [messages, setMessages] = useState<Message[]>([]);
@@ -39,14 +44,14 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   useEffect(() => { setStatus(null); void check(); return () => { ++detection.current; }; }, [check]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; const run = active.current; if (run) void run.backend.cancelTurn(run.id).catch(() => {}); }; }, []);
 
-  const canSend = !!workspace && !!status?.canRun && !!prompt.trim() && !busy && !choosing && !checking;
+  const canSend = !!workspace && !!status?.canRun && (mode === 'demo' || signedIn) && !!prompt.trim() && !busy && !choosing && !checking;
   async function chooseWorkspace() {
     if (busy || choosing) return;
-    setChoosing(true); setError(null);
+    setChoosing(true); setError(null); setPassword('');
     try { const selected = await backend.chooseWorkspace(); if (selected && mounted.current) {
-      setWorkspace(selected); if (selected !== workspace) { setMessages([]); setActivities([]); setOutcome(''); }
+      setSignedIn(false); setWorkspace(selected); if (selected !== workspace) { setMessages([]); setActivities([]); setOutcome(''); }
     } }
-    catch (failure) { if (mounted.current) setError(safeError(failure).message); }
+    catch (failure) { if (mounted.current) { setSignedIn(false); setError(safeError(failure).message); } }
     finally { if (mounted.current) setChoosing(false); }
   }
   function receive(runId: string, event: DesktopEvent) {
@@ -60,7 +65,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       return index < 0 ? [...previous, message].slice(-100) : previous.map((item) => item.id === id ? message : item);
     });
     if (event.type === 'error') setError(event.message);
-    if (event.type === 'run-finished') setOutcome(event.outcome === 'cancelled' ? 'Turn stopped. No further demo events will arrive.' : event.outcome === 'completed' ? 'Turn complete' : 'Turn did not complete');
+    if (event.type === 'run-finished') setOutcome(event.outcome === 'cancelled' ? (mode === 'demo' ? 'Turn stopped. No further demo events will arrive.' : 'Stopped locally. Remote job state is unknown; a submitted job may continue.') : event.outcome === 'completed' ? 'Turn complete' : 'Turn did not complete');
   }
   async function send() {
     if (!canSend || !workspace || active.current) return;
@@ -70,7 +75,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
     active.current = { id: runId, backend }; setBusy(true); setError(null); setOutcome('');
     setMessages((previous) => [...previous, { id: runId, role: 'user' as const, text: prompt }].slice(-100)); setPrompt('');
     try { await backend.runTurn(request, (event) => receive(runId, event)); }
-    catch (failure) { const safe = safeError(failure); receive(runId, { type: 'error', category: safe.category, message: safe.message }); }
+    catch (failure) { if (mode === 'native') setSignedIn(false); const safe = safeError(failure); receive(runId, { type: 'error', category: safe.category, message: safe.message }); }
     finally { if (active.current?.id === runId) active.current = null; if (mounted.current) setBusy(false); }
   }
   async function cancel() {
@@ -78,25 +83,39 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
     try { await run.backend.cancelTurn(run.id); }
     catch (failure) { if (mounted.current) setError(safeError(failure).message); }
   }
+  async function login() {
+    if (!workspace || !backend.authenticate || signingIn) return;
+    setSigningIn(true); setError(null);
+    try { await backend.authenticate({ username, baseUrl, password, permissions }); setSignedIn(true); }
+    catch (failure) { setError(safeError(failure).message); setSignedIn(false); }
+    finally { setPassword(''); setSigningIn(false); }
+  }
   return <div className="app-shell">
     <header className="app-header"><div className="brand"><span className="brand-mark" aria-hidden="true">jv</span><div>JV Desktop<span className="brand-subtitle">Your workspace, in conversation</span></div></div>
       <div className="header-controls"><label className="sr-only" htmlFor="backend-mode">Backend mode</label>
-        <select id="backend-mode" value={mode} disabled={busy || choosing} onChange={(e) => { setMode(e.target.value as BackendMode); setWorkspace(null); setError(null); setMessages([]); setActivities([]); setOutcome(''); }}>
+        <select id="backend-mode" value={mode} disabled={busy || choosing || signingIn} onChange={(e) => { void backends.native.close?.().catch(() => {}); setSignedIn(false); setPassword(''); setMode(e.target.value as BackendMode); setWorkspace(null); setError(null); setMessages([]); setActivities([]); setOutcome(''); }}>
           <option value="demo">Offline demo</option><option value="native">Native JV CLI</option>
         </select><span className="preview-label">FOUNDATION</span></div>
     </header>
     <div className="workspace-bar"><span className="folder-icon" aria-hidden="true">▱</span><div className="workspace-location"><span>WORKSPACE</span><p title={workspace ?? undefined}>{workspace ?? 'Choose a project folder to begin'}</p></div>
-      <button className="secondary" onClick={() => void chooseWorkspace()} disabled={busy || choosing}>{choosing ? 'Choosing…' : 'Open Folder'}<span aria-hidden="true">↗</span></button>
+      <button className="secondary" onClick={() => void chooseWorkspace()} disabled={busy || choosing || signingIn}>{choosing ? 'Choosing…' : 'Open Folder'}<span aria-hidden="true">↗</span></button>
     </div>
     <div className="backend-banner"><span className="status-dot" /><strong>{checking ? 'Checking backend…' : mode === 'demo' ? 'Offline preview' : `JV CLI: ${status?.availability ?? 'unavailable'}`}</strong><span>{status?.detail}</span>
       {mode === 'native' && <button className="text-button" onClick={() => void check()} disabled={checking || busy}>Check again</button>}
     </div>
+    {mode === 'native' && workspace && status?.canRun && !signedIn && <form className="auth-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void login(); }}>
+      <label>Username<input value={username} onChange={(e) => setUsername(e.target.value)} disabled={signingIn} autoComplete="off" /></label>
+      <label>Service URL<input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} disabled={signingIn} /></label>
+      <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={signingIn} autoComplete="new-password" /></label>
+      <button className="primary" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in…' : 'Sign in'}</button>
+      <small>Sign-in contacts the selected service. Password is held in memory only. Choose permissions before signing in.</small>
+    </form>}
     <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : 'Native preview'}</span></div>
       <Conversation messages={messages} busy={busy} demo={mode === 'demo'} />
       {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
       <div className="turn-outcome" role="status">{outcome || (!workspace ? 'Select a workspace before sending a message.' : '')}</div>
-      <Composer prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
+      <Composer permissionLocked={mode === 'native' && (signedIn || signingIn)} prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
     </div><ActivityFeed activities={activities} busy={busy} /></main>
-    <footer className="app-footer"><span>Local workspace · Explicit permissions</span><span>{mode === 'demo' ? 'No service calls. No file changes.' : 'Native submission is disabled in this foundation.'}</span></footer>
+    <footer className="app-footer"><span>Local workspace · Explicit permissions</span><span>{mode === 'demo' ? 'No service calls. No file changes.' : 'Bridge protocol 1 · Passwords are not saved.'}</span></footer>
   </div>;
 }

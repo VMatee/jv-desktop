@@ -3,6 +3,7 @@ export interface Activity { id: number; event: DesktopEvent }
 function label(event: DesktopEvent): string {
   switch (event.type) {
     case 'session-started': return 'Session started';
+    case 'tool-started': return `Tool: ${event.name}`;
     case 'turn-started': return 'Turn started';
     case 'command-started': return 'Command started';
     case 'command-completed': return event.exitCode === 0 ? 'Command completed' : event.exitCode === null ? 'Command finished · status unknown' : `Command failed · exit ${event.exitCode}`;

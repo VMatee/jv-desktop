@@ -1,4 +1,5 @@
 //! Desktop's process boundary. No JV source, credentials, HTTP client, or shell.
+pub mod bridge;
 mod platform;
 pub mod process;
 
@@ -11,6 +12,8 @@ pub const MAX_PROMPT_BYTES: usize = 32 * 1024;
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCategory {
     Unavailable,
+    UpgradeRequired,
+    ProtocolError,
     InvalidWorkspace,
     InvalidPrompt,
     PermissionConflict,

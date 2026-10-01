@@ -8,7 +8,7 @@ export function Conversation({ messages, busy, demo }: { messages: Message[]; bu
       <h1>Your project.<br />A thoughtful copilot.</h1>
       <p>Choose a folder, set your permissions, and start a conversation.</p>
       <div className="example-prompt"><span aria-hidden="true">↗</span> ช่วยตรวจ project นี้</div>
-      <p className="empty-footnote">{demo ? 'This offline demo simulates a conversation. Your files stay untouched.' : 'Native conversations will be available after secure sign-in and prompt transport are ready.'}</p>
+      <p className="empty-footnote">{demo ? 'This offline demo simulates a conversation. Your files stay untouched.' : 'Choose permissions, then sign in to start a native conversation. Sign-in contacts the selected service.'}</p>
     </div> : <div className="message-list" role="log" aria-live="polite" aria-relevant="additions text">
       {messages.map((message) => <article className={`message ${message.role}`} key={message.id}>
         <div className="avatar" aria-hidden="true">{message.role === 'user' ? 'Y' : 'jv'}</div>

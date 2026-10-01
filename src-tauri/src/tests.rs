@@ -16,8 +16,13 @@ fn app() -> (
     let app = test::mock_builder()
         .manage(DesktopState {
             selected: Mutex::new(Some(workspace.clone())),
+            ..Default::default()
         })
-        .invoke_handler(tauri::generate_handler![run_turn, cancel_turn])
+        .invoke_handler(tauri::generate_handler![
+            run_turn,
+            cancel_turn,
+            authenticate
+        ])
         .build(tauri::generate_context!())
         .unwrap();
     let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
@@ -59,7 +64,7 @@ fn request(workspace: &std::path::Path) -> Value {
 }
 
 #[test]
-fn registered_native_turn_stays_gated_for_every_valid_policy() {
+fn registered_native_turn_requires_authenticated_bridge_for_every_policy() {
     let (_app, window, workspace) = app();
     for (access, network) in [
         ("read-only", false),
@@ -104,4 +109,21 @@ fn unused_core_commands_are_not_authorized() {
         .err()
         .unwrap();
     assert!(error.as_str().unwrap().contains("not allowed"));
+}
+
+#[test]
+fn authentication_cannot_inject_a_child_environment() {
+    let (_app, window, _) = app();
+    let mut body = json!({"request":{"username":"synthetic","baseUrl":"http://127.0.0.1:9","password":"TEST_PASSWORD_DO_NOT_LEAK","permissions":{"access":"read-only","network":false}}});
+    assert_eq!(
+        invoke(&window, "authenticate", body.clone()).err(),
+        Some(json!("authentication-required"))
+    );
+    body["request"]["environment"] = json!({"PATH":"untrusted"});
+    let error = invoke(&window, "authenticate", body).err().unwrap();
+    assert!(error
+        .as_str()
+        .unwrap()
+        .contains("unknown field `environment`"));
+    assert!(!error.to_string().contains("TEST_PASSWORD_DO_NOT_LEAK"));
 }

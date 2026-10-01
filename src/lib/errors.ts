@@ -1,10 +1,12 @@
 import type { ErrorCategory } from '../types/events';
 export const errorMessages: Record<ErrorCategory, string> = {
+  'upgrade-required': 'Upgrade JV CLI to version 0.4.9 or newer.',
+  'protocol-error': 'The local bridge returned invalid protocol data. Reopen the workspace to reconnect.',
   unavailable: 'JV CLI was not found. Install the official Linux CLI and check again.',
   'invalid-workspace': 'Choose an existing project folder, outside your home root or application folder.',
   'invalid-prompt': 'Enter a message no larger than 32 KiB.',
   'permission-conflict': 'Read only cannot be combined with tool networking.',
-  'authentication-required': 'Native runs are paused until secure sign-in and prompt transport are ready. Use the offline demo for now.',
+  'authentication-required': 'Sign-in is required or was unsuccessful. Reopen the workspace and sign in again.',
   'unsupported-platform': 'A native JV CLI backend is not supported on this platform yet. The offline demo is available.',
   'process-failed': 'JV exited unsuccessfully. No raw process diagnostics have been displayed.',
   timeout: 'The local process timed out and was stopped.',

@@ -1,8 +1,8 @@
 # Offline native GUI acceptance
 
 Run from a normal Ubuntu graphical terminal. **Offline only: no JV password,
-no real task, no exec/resume command, no production workspace.** Keep the native
-execution gate closed. These are checks, not instructions to enable integration.
+no real task, no exec/resume command, no production workspace.** Do not click Sign in. This checklist validates the shell and unauthenticated
+bridge only; production acceptance is separately authorized.
 
 ```sh
 cd /home/small-server/Desktop/RPALLMs/jv-desktop
@@ -32,8 +32,9 @@ shell startup files. Do not install a package or change display permissions.
 - [ ] Read only disables tool networking. Workspace write enables the network
   checkbox. Switching back to Read only clears/disables it. No bypass mode exists.
 - [ ] Select **Native JV CLI**. The installed trusted CLI should be detected by
-  its local `--version` check, with an explanation that native runs are disabled.
-  Send remains disabled even with a workspace and nonempty harmless prompt.
+  its local `--version` check as 0.4.9 or newer. Select the disposable folder
+  to start an unauthenticated bridge. The sign-in form appears; leave it empty.
+  Send remains disabled until explicit authentication/session creation.
   Do not enter credentials or attempt a real task.
 
 The registered Rust IPC boundary is checked safely without a WebView or CLI:
@@ -42,10 +43,10 @@ The registered Rust IPC boundary is checked safely without a WebView or CLI:
 PATH="$PWD/.tools/node/bin:$PATH" npm run tauri:test
 ```
 
-All three tests must pass, including `authentication-required` for valid native
+All four tests must pass, including `authentication-required` for valid native
 requests. This does not claim a direct invocation from the production WebView;
 that remains a separate harness-level check. Do not enable production devtools,
-add permissions or weaken the gate to perform it.
+add permissions or authenticate to production to perform it.
 
 Record date, OS/display session, executable version and pass/fail observations.
 Known automated native coverage is in [Validation](VALIDATION.md); do not mark

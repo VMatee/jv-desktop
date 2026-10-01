@@ -97,3 +97,8 @@ textarea::placeholder { color: #73806f; }
 @media (max-width: 950px) { .app-shell { height: auto; min-height: 100dvh; } .main-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; } .activity-panel { max-height: 250px; } .activity-empty { margin: 8px 0 16px; } .activity-empty > span { display: none; } .activity-empty p { margin-top: 0; } .conversation { min-height: 280px; max-height: 50dvh; } .permission-note { display: none; } }
 @media (max-width: 600px) { .app-header { padding: 18px 16px; } .brand-subtitle, .preview-label { display: none; } .brand { font-size: 16px; } .header-controls select { max-width: 130px; font-size: 12px; } .workspace-bar, .main-grid { margin-left: 12px; margin-right: 12px; } .backend-banner { margin-left: 18px; margin-right: 18px; } .workspace-bar { padding: 12px; gap: 8px; } .folder-icon { display: none; } .app-footer { padding: 14px; flex-direction: column; gap: 2px; } .composer-footer > span { max-width: 130px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.auth-form { display:flex; flex-wrap:wrap; gap:12px; padding:16px 24px; border-bottom:1px solid var(--border); }
+.auth-form label { display:flex; flex:1; min-width:150px; flex-direction:column; gap:5px; font-size:12px; }
+.auth-form input { color:inherit; background:transparent; border:1px solid #555; border-radius:6px; padding:8px; }
+.auth-form small { flex-basis:100%; opacity:.75; }

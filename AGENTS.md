@@ -15,9 +15,9 @@ AGENTS.md when present. Local source is authoritative.
 - Use bounded structured JSONL, never terminal-screen scraping or raw HTML.
 - Invoke processes with native argument vectors; never shell interpolation.
   Set cwd explicitly to a validated, explicitly chosen workspace.
-- Native turn submission is deliberately blocked until prompt transport and
-  authentication receive a security review. Do not remove the gate just to pass
-  a test. The fixture stdin protocol is not the current public JV CLI contract.
+- Native Linux integration uses reviewed `jvcli bridge --stdio` protocol 1 with
+  CLI>=0.4.9. Never fall back to exec argv prompts or password environment variables.
+  Keep tests synthetic/offline; production acceptance needs separate authorization.
 - Keep platform process behavior isolated. Windows requires native semantics;
   never pretend POSIX cancellation works on Windows.
 - Keep dependency caches, toolchains, temporary files and build output inside

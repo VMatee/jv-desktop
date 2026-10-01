@@ -55,8 +55,9 @@ npm run tauri -- dev
 
 The native shell uses the real folder picker for both modes. Selecting a folder
 does not edit it. Native mode detects `jvcli --version` once when selected or on
-**Check again**, with a three-second timeout. Even if detected, native turn
-submission is disabled in Rust and UI. No authentication form is implemented.
+**Check again**, with a three-second timeout. CLI 0.4.9 or newer is required. Native folder selection starts a bridge without
+authentication. Do not use Sign in during ordinary development: use Offline demo
+and fake bridge tests. Live acceptance requires separate authorization.
 
 ## Checks and what they prove
 
@@ -99,8 +100,10 @@ command-fails, malformed, unknown, oversized, invalid-utf8, nonzero, slow, tree,
 no-stdin, flood, flood-no-newline, stderr-flood and inspect. Success includes a changed file and Thai
 assistant response. Inspect echoes only synthetic test argv/cwd/prompt and the
 names of the minimal child environment keys. The fixture has no network client.
-The stdin protocol is **not** supported by public JV CLI 0.4.7; see
-[CLI contract](CLI_CONTRACT.md).
+This older fixture remains for runner regression. New `fake-bridge` uses the
+public protocol 1 shape and synthetic auth/session/turn/cancel/shutdown responses.
+It verifies workspace restart, older CLI rejection, broken pipe, malformed and
+oversized output, failures and Unicode. It never uses a network client.
 
 Frontend tests reject fetch/XHR. Browser checks abort non-loopback requests before
 they can be sent and assert none were requested. Rust tests create only ignored
@@ -127,3 +130,18 @@ available checks and record GUI environment blockers honestly. Fetch the intende
 origin, inspect divergence and push normally only if histories are compatible.
 Never reset siblings or overwrite unexpected remote commits. Re-check workspace
 isolation against the initial sibling status/HEAD record.
+
+## Optional installed bridge compatibility probe (no authentication)
+
+This is an explicit manual probe, separate from automated fixture tests. With a
+trusted installed CLI>=0.4.9, create a disposable directory and isolated state:
+
+```sh
+mkdir -p .cache/bridge-probe/workspace
+node scripts/cargo.mjs run -p jv-desktop-process --example bridge_probe --locked -- \
+  "$PWD/.cache/bridge-probe/workspace" "$PWD/.cache/bridge-probe/state"
+```
+
+The example resolves the fixed `jvcli` name, checks version/readiness and sends
+shutdown only. It has no login/turn code. Use a network namespace for independent
+offline assurance. Never add credentials to this probe.

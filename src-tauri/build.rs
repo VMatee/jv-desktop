@@ -5,6 +5,9 @@ fn main() {
             "detect_backend",
             "run_turn",
             "cancel_turn",
+            "open_bridge",
+            "close_bridge",
+            "authenticate",
         ]),
     ))
     .expect("Tauri build configuration could not be generated");

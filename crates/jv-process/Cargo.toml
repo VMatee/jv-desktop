@@ -20,3 +20,8 @@ libc = "0.2.189"
 name = "fake-jvcli"
 path = "tests/fixtures/fake_jvcli.rs"
 required-features = ["test-fixture"]
+
+[[bin]]
+name = "fake-bridge"
+path = "tests/fixtures/fake_bridge.rs"
+required-features = ["test-fixture"]

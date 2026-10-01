@@ -1,7 +1,7 @@
 name: Desktop foundation checks
 on:
   push:
-    branches: [main]
+    branches: [main, feature/bridge-client]
   pull_request:
 permissions:
   contents: read

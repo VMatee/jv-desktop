@@ -1,5 +1,75 @@
 # Validation record
 
+## Bridge integration — 2026-10-01
+
+Starting Desktop main: `08d55bb9ec3df356946985b28822a4c8fd7325a4`.
+This section supersedes earlier disabled-native/version-mismatch descriptions;
+historical results below describe their original milestones.
+
+### Current verified checks
+
+- **27 frontend tests**, **17 Rust core/fixture tests** (10 original + 7 bridge),
+  **4 registered Tauri IPC tests**, and **1 browser acceptance test** passed.
+- TypeScript/frontend build, rustfmt, Rust check/Clippy, Tauri native check passed.
+- The full local test/check/browser sequence ran with Bubblewrap `--unshare-net`.
+  Browser non-loopback blocking remains intact. All authenticated turns used the
+  deterministic fake bridge with synthetic credentials; no production endpoint.
+- Rust BridgeSupervisor independently started the installed **JV CLI 0.4.9**, checked
+  protocol 1 readiness and shut down in a network namespace. No auth request sent.
+- Linux production executable and **deb/rpm/AppImage all built successfully**.
+  An initial AppImage attempt encountered ETXTBSY while the test executable was
+  running. Closing only our test window and rebuilding resolved it. No security
+  permission, bundle configuration or system setting was loosened.
+- No dependency versions or lockfiles changed. Generated artifacts stay ignored:
+  `target/release/jv-desktop`, `target/release/bundle/deb/JV Desktop_0.1.0_amd64.deb`,
+  `target/release/bundle/rpm/JV Desktop-0.1.0-1.x86_64.rpm`, and
+  `target/release/bundle/appimage/JV Desktop_0.1.0_amd64.AppImage`.
+
+### Native graphical validation
+
+Existing X11 access worked without display configuration changes. Launched the
+production executable with a network namespace and repository-local XDG/runtime
+paths, leaving the owner's existing Desktop process untouched. GTK used software
+rendering after a GL-context warning. In our PID-specific test window, verified:
+
+- Main window/WebView and native folder dialog opened.
+- Disposable repository-local workspace selected successfully.
+- Thai `ไทย` entered using GTK Unicode composition; confirming composition did
+  not submit. Shift+Enter added a newline, then Enter sent only an offline turn.
+- Thai demo reply, command/activity and completion rendered; demo Stop worked.
+- Workspace-write enabled tool networking; the checkbox toggled.
+- Native mode reported detected; choosing the disposable directory opened the
+  unauthenticated bridge and displayed the sign-in form. No credential entered.
+- Closed our window cleanly. The installed CLI version was separately verified
+  as 0.4.9; the exact version label was not independently read from accessibility.
+
+This is not a live-auth/turn test. Owner-preferred Thai IME and native resize are
+not newly validated here; automated IME and browser responsive checks pass.
+
+### CI and security
+
+Desktop remote Ubuntu/Windows CI could not be independently inspected: the private
+repository API returned 404 and the existing GitHub connector was disconnected.
+No credentials/configuration were changed to obtain access. Workflow now also runs
+on feature/bridge-client; shared tests and Windows compile gate remain enabled.
+Local Linux build/test gates passed. No new Windows runner success is claimed.
+
+Only seven narrowly scoped application commands are granted. CSP is unchanged;
+no shell, generic process, filesystem or unrestricted core permission was added.
+IPC tests reject executable/environment injection and unauthenticated turns.
+Passwords are memory-only via IPC/stdin; prompts never enter argv. Terminal state
+is isolated from Desktop JVCLI_HOME. Stop reports local cancellation with remote
+state unknown. Legacy exec gate remains closed and no argv fallback is provided.
+
+JV CLI 0.4.9 was released from `b891df33365080af9ff587d69d74a434b79087ba`;
+its full 377-test regression (3 skips), 46 bridge tests, package verification,
+scripted engine smoke and release CI passed. Published normal/offline ZIP checksums
+were verified. Official upgrade preserved installed settings/sessions/runtime.
+
+**Zero production authentication attempts, zero real jobs/inference requests,
+zero real passwords used.** No server/service change. The next functional Linux
+integration step is separately authorized controlled live Desktop acceptance.
+
 ## Offline/native follow-up — 2026-09-30
 
 Starting published commit: `b160011f152c2b0c68ba5c6c5d725563a83e8231`.

@@ -39,3 +39,7 @@ The existing `jvcli-windows` sibling repository must remain unchanged during
 Desktop work. Its contents are not copied, built, modified or presented as an
 implemented Desktop backend. WSL automation, code signing, installers/releases,
 auto-updates and terminal work require separate milestones.
+
+Future bridge state will use Tauri app_local_data_dir()/jvcli-state on Windows,
+with Windows-specific private-directory and owned-process semantics. Linux
+protocol 1 integration does not enable native Windows or WSL execution.

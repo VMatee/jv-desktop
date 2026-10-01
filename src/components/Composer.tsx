@@ -2,11 +2,12 @@ import { useEffect, useRef } from 'react';
 import type { Permissions } from '../types/events';
 
 interface Props {
+  permissionLocked?: boolean;
   prompt: string; permissions: Permissions; busy: boolean; canSend: boolean;
   onPrompt: (text: string) => void; onPermissions: (value: Permissions) => void;
   onSend: () => void; onCancel: () => void;
 }
-export function Composer({ prompt, permissions, busy, canSend, onPrompt, onPermissions, onSend, onCancel }: Props) {
+export function Composer({ permissionLocked = false, prompt, permissions, busy, canSend, onPrompt, onPermissions, onSend, onCancel }: Props) {
   const composing = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const wasBusy = useRef(false);
@@ -14,15 +15,15 @@ export function Composer({ prompt, permissions, busy, canSend, onPrompt, onPermi
   return <section className="composer" aria-label="Message composer">
     <div className="permission-row">
       <label className="access-label">Access
-        <select aria-label="Workspace permission" value={permissions.access} disabled={busy}
+        <select aria-label="Workspace permission" value={permissions.access} disabled={busy || permissionLocked}
           onChange={(e) => onPermissions({ access: e.target.value as Permissions['access'], network: e.target.value === 'read-only' ? false : permissions.network })}>
           <option value="read-only">Read only</option><option value="workspace-write">Workspace write</option>
         </select>
       </label>
       <label className="network-control"><input type="checkbox" checked={permissions.network}
-        disabled={busy || permissions.access === 'read-only'}
+        disabled={busy || permissionLocked || permissions.access === 'read-only'}
         onChange={(e) => onPermissions({ ...permissions, network: e.target.checked })} />Tool network</label>
-      <span className="permission-note">Permissions apply to each new turn</span>
+      <span className="permission-note">{permissionLocked ? 'Session permissions fixed · reopen folder to change' : 'Permissions apply to the session'}</span>
     </div>
     <form onSubmit={(e) => { e.preventDefault(); if (canSend && !composing.current) onSend(); }}>
       <label className="sr-only" htmlFor="message">Message JV</label>

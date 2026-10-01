@@ -1,81 +1,40 @@
-# Inspected JV CLI contract
+# JV CLI compatibility baseline
 
-The installed official CLI source was inspected read-only during foundation work:
-**JV CLI 0.4.7**, public `lib/jvcli/cli.py` parser and dispatch, plus its launcher.
-No account configuration, session, environment secret, credential or key content
-was opened. No real exec/resume command was run. Re-inspect this contract before
-enabling native submission; version detection alone cannot prove compatibility.
+Desktop's native adapter targets **JV CLI 0.4.9 or newer with bridge protocol 1**.
+The installed/source mismatch observed in Milestone2 (installed0.4.7/source0.4.8)
+is superseded by the verified0.4.9 release and local upgrade. Older versions report
+Upgrade required; detection never falls back to `exec` positional prompts.
 
-## Milestone 2 version observation (2026-09-30)
+Invocation is exactly `jvcli bridge --stdio`, with selected workspace as cwd and
+Desktop-owned `JVCLI_HOME`. Startup must return bridge.ready, protocol 1, compatible
+CLI version and matching workspace. Detection is local-only and proves neither
+authentication nor service health. Linux is the only current executable backend.
 
-The installed executable still reports **JV CLI 0.4.7** through the local-only
-`--version` path. The independent sibling source tree reports **0.4.8** in its
-`VERSION` file. Neither installation nor source was upgraded or modified. The
-0.4.7 inspection below does not establish 0.4.8 machine-facing behavior. Real
-integration must choose and verify a single compatibility baseline before any
-real Desktop turn is allowed. It requires a separately reviewed version decision,
-prompt transport, authentication and cancellation contract. Detection of either
-version must never open the native turn gate.
-
-## Public input versus internal engine input
-
-The public parser defines:
-
-```text
-jvcli exec [permission flags] --json PROMPT [PROMPT ...]
-jvcli resume SESSION_ID [permission flags] --json [PROMPT ...]
-```
-
-`exec` has a required positional prompt (`nargs="+"`). The dispatcher joins the
-prompt arguments with spaces. It does **not** implement an exec stdin sentinel.
-Passing `-` would be a literal prompt, not an instruction to read stdin. Without
-a positional prompt, noninteractive use is rejected. The engine subprocess
-inside JV CLI separately uses stdin, but that private implementation does not
-make stdin available to Desktop at the public CLI boundary.
-
-Desktop therefore does not invent `exec --json -`, pipe a prompt into an
-unsupported interface, or put user text into argv. The Rust `exec_args` function
-constructs only the verified prefix/permission flags. `native_turn_gate` blocks
-the request before a process is created. A future explicit CLI stdin option or
-reviewed `bridge --stdio` contract is needed to preserve prompt privacy.
-
-The fake executable supports stdin **only as its documented fixture contract**.
-Its `--fixture SCENARIO` flag cannot be passed through the Desktop IPC API. This
-is a deterministic test transport, not a claim of compatibility with public exec.
-
-## Permission matrix
-
-| Desktop choice | Verified CLI flag |
+| Action | Bridge request |
 | --- | --- |
-| Read only; tool network off | `--read-only` |
-| Workspace write; tool network on | `--allow-network` |
-| Workspace write; tool network off | `--no-network` |
-| Read only; tool network on | Rejected as a conflict |
+| Explicit sign-in | auth.login, username/base_url/password over stdin |
+| Session creation after auth | session.start |
+| User message | turn.start, text over stdin |
+| Stop | turn.cancel, current Rust-owned turn_id |
+| Workspace/app close | bridge.shutdown |
 
-The default CLI write policy allows tool networking; Desktop nevertheless
-constructs an explicit allow/deny flag in write mode. There is no elevated,
-bypass or unrestricted mode. These flags govern tools, not the authenticated
-JV service connection. The CLI remains authoritative for its sandbox and writes.
+| Policy | read_only | allow_network |
+| --- | --- | --- |
+| Read only | true | false |
+| Workspace write + network | false | true |
+| Workspace write without tool network | false | false |
 
-## Authentication and detection
+Read-only plus network is rejected. No bypass mode exists. Tool network denial
+does not disable the JV service connection. The CLI owns sandbox/session rules.
 
-In this version, `_password()` consumes `JV_API_PASSWORD` for noninteractive
-authentication; otherwise it requires a terminal password prompt. Saved account
-configuration can contain username/origin, but not a reusable password. Desktop
-does not open that configuration, inherit the password variable, launch login,
-or implement a temporary password form. The native execution gate remains closed.
+Passwords never enter argv, environment, config or session metadata. The bridge
+holds token ownership and performs logout; Desktop receives no token. Prompts
+use stdin at both Desktop→bridge and bridge→engine boundaries. Existing terminal
+exec/resume and their JSON modes remain separate, unchanged interfaces.
 
-`--version` is handled by argparse before `_ensure_state()` and account/session
-dispatch. The installed launcher also disables Python bytecode writes. Detection
-uses that local-only path with a three-second timeout, cleared environment and
-bounded output; it is tested against a fake version command. `doctor` is not used
-or needed for Desktop detection. Desktop development did not run any real task.
-
-## Cancellation limitation
-
-The CLI's internal engine is started in a new session. Killing only Desktop's
-child process group cannot prove every real engine/tool descendant is terminated.
-The foundation runner's group cancellation is verified with its owned fake
-process tree. A real CLI cancellation contract and remote-job behavior must be
-reviewed before native execution is enabled. Local Stop must never be presented
-as proof that a submitted remote job was cancelled.
+The protocol is documented in the independent CLI repository's
+`docs/BRIDGE_PROTOCOL.md`. Desktop uses allowlisted normalized bridge events,
+not raw engine events. Cancellation is local-only; remote state remains unknown.
+Current Desktop does not expose bridge resume, new-thread or images. No live
+production compatibility acceptance has yet been performed; the next acceptance
+must be separately authorized and controlled.
