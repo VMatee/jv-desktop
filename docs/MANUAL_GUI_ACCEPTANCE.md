@@ -75,3 +75,53 @@ No real Sign in or production turn is authorized by this checklist.
 
 Fixture WebView acceptance may exercise synthetic sign-in/turns separately, but
 its fixed folder does not substitute for this real native dialog/close checklist.
+
+### Native manual actions with automated postconditions
+
+The following driver uses the **normal release executable**, with the real
+Windows folder dialog and title-bar close button. It does not enable
+`offline-fixture`, replace the picker, call JavaScript `window.close()` or count
+forced test cleanup as native close acceptance.
+
+```powershell
+$env:PATH = "$PWD\.tools\node;$env:PATH"
+& .tools/node/npm.cmd run tauri -- build --no-bundle
+& .tools/node/node.exe scripts/cargo.mjs build -p jv-desktop-process --features test-fixture --bin fake-bridge --locked
+& .tools/node/node.exe scripts/windows-native-gui-acceptance.mjs
+```
+
+The process-assertion helper requires Python 3.10 for this developer acceptance
+driver. The installed Desktop runtime does not gain a Python dependency.
+
+The driver creates a disposable `.cache/manual-gui/run-*` directory and copies
+the deterministic fake bridge to its isolated per-user CLI installation path.
+Only this test process receives that `LOCALAPPDATA`; the real installation,
+terminal state and Desktop state are untouched. The existing production resolver,
+dialog, IPC and shutdown paths remain active. No sign-in or service call is needed.
+
+Perform the native actions as each phase requests:
+
+1. Select the printed `workspace ไทย\tree` folder in the native dialog.
+2. Click **Cancel** in the reopened native dialog.
+3. Select the printed `workspace ไทย\hung-tree` folder in the next native dialog.
+4. Click the Desktop window's real title-bar **X**. Leave the sign-in form empty.
+
+All other assertions are automated: canonical selection, matching bridge cwd,
+registered IPC rejection of another workspace/root, cancellation preserving the
+selection/tree, previous bridge exit before the replacement bridge is created,
+cleanup of its child/grandchild, and cleanup of Desktop/bridge/child/grandchild
+while an unrelated sentinel survives.
+The replacement fake bridge deliberately ignores cooperative shutdown. Process
+handles reserve identities; process-name scans are never used for termination.
+
+Results and screenshots stay under the ignored run directory. `current.json`
+under `.cache/manual-gui` identifies the current action for an assisting agent.
+The driver waits up to ten minutes per manual action and fails nonzero on an
+unfulfilled postcondition. Report successful runs as **native manual-action
+acceptance + automated postconditions**, not fully automated native GUI testing.
+An assisting agent can pass `--guided` to pause before each action. It displays
+the next instruction, then writes `{"stage":"ACTION"}` to the run's
+`continue.json` to open that phase; the operator never needs to inspect or edit
+these control files. A disposable run directory can also be passed to reuse its
+test paths after a harness-only correction. Always close the previous test app
+first; this option does not select a workspace in the application.

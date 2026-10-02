@@ -1,5 +1,62 @@
 # Validation record
 
+## Windows native GUI acceptance gap closure — 2026-10-02
+
+Baseline: `feature/windows-native` at
+`f660cbceda66b78f1e38b7cc2130d81cc0d28536`, clean and freshly fetched.
+The normal release executable was rebuilt with `npm run tauri -- build
+--no-bundle`, without `offline-fixture`. Its SHA256 was
+`7f8a53614b1fbab7bc1cf74ac076651f7b32f11c35efbe7907687175ada13a00`.
+Desktop remains 0.1.1. No product/backend/CLI source or dependency change was
+needed; this checkpoint adds the acceptance harness, its syntax checks and evidence.
+
+Supported native computer-use initialization, retry and reset still failed with
+OS error 2 (native pipe unavailable). The operator therefore performed four
+native actions in the actual release app; all postconditions were automated.
+This is **native manual-action acceptance + automated postconditions**.
+
+| Native control | Result and evidence |
+| --- | --- |
+| Real Windows folder picker | **PASS**. Operator confirmed the native dialog appeared and selected a disposable local drive path ending `workspace ไทย\tree`. The displayed canonical path matched the workspace used by the Rust-owned bridge; protocol readiness validated that same workspace. |
+| Native picker Cancel | **PASS**. Operator clicked Cancel. Canonical selection and the existing bridge/child/grandchild remained unchanged. |
+| Workspace replacement | **PASS**. Operator selected `workspace ไทย\hung-tree`. Held process handles proved the previous bridge exited before the replacement bridge was created; its child/grandchild also exited. |
+| Real native title-bar X | **PASS**. Operator explicitly confirmed using the title-bar X. Desktop exited with code 0; bridge, child and grandchild exited, every captured app descendant exited, no hidden owned descendant remained, and the unrelated sentinel survived. |
+
+The replacement fake bridge deliberately ignores `bridge.shutdown`; the existing
+bounded Job Object fallback remained unchanged and cleaned the tree. A separate
+registered IPC check rejected a different valid folder and a drive root without
+executing a turn. Root selection in the native dialog itself was not newly tested.
+Initial harness-only corrections were completed before the final successful run;
+failure cleanup was never counted as native window-close acceptance.
+
+`scripts/windows-native-gui-acceptance.mjs --guided` completed **6 checks, zero
+skips**, with results/screenshots isolated under ignored `.cache/manual-gui`.
+`scripts/windows-gui-process-watch.py` retains process handles to avoid PID reuse
+and never terminates processes by name. The normal production resolver selects
+the fake CLI from a test-only per-user installation through isolated
+`LOCALAPPDATA`; neither the real CLI installation nor ordinary user state changes.
+No picker replacement, JavaScript close or forced Desktop termination was used
+in the successful acceptance run.
+
+Local regression commands all passed:
+
+| Command | Result |
+| --- | --- |
+| `npm test` | 32 passed |
+| `npm run build` | passed |
+| `npm run rust:fmt`, `rust:check`, `rust:clippy` | passed |
+| `npm run rust:test` | 35 passed: 6 core, 8 bridge, 6 runner, 15 Windows native |
+| `npm run tauri:check` | passed |
+| `npm run tauri:test` | 6 passed |
+| Node driver / Python watcher syntax | both passed |
+
+Zero ignored/security-relevant skipped tests. The accepted runtime architecture,
+trusted-host policy, external CLI, credentials handling, private state, protocol
+and Linux behavior remain unchanged. No production authentication, password,
+job or inference was used. Installer lifecycle, live acceptance, signing,
+versioning and release remain separate milestones. Each published successor SHA
+still requires its own Windows/Linux CI verification after publication.
+
 ## Windows native integration — 2026-10-02
 
 Starting Desktop main: `86dab4b71c9bf222cfb7222aa3434bfa8db33aaf`, version 0.1.1.
@@ -75,10 +132,11 @@ real CLI. Screenshots/state remain ignored in `.cache/gui`.
 
 Native computer-use initialization and documented recovery failed because its
 native pipe is unavailable (OS error 2). JavaScript window.close did not exit the app.
-The native folder dialog and window-manager close button are therefore **not
-accepted yet**. The fixed fixture folder and forced test-process exit do not count
-as those native UI checks. Owned parent-death cleanup is independently proven by
-Rust and real-CLI tests.
+The native folder dialog and window-manager close button were **not accepted in
+that integration run**. They are now covered by the separate native manual-action
+acceptance above. The fixed fixture folder and forced test-process exit do not
+count as those native UI checks. Owned parent-death cleanup is independently
+proven by Rust and real-CLI tests.
 
 ### Publication / CI / remaining work
 
@@ -101,8 +159,9 @@ SSH authenticated specifically to `VMatee/jv-desktop`. Only this repository's
 remote/local SSH command changed; no global SSH configuration, private-key read,
 force push or sibling repository modification was used.
 
-Remaining acceptance: native folder/window-close controls. Controlled live
-account acceptance, Windows
+At that checkpoint native folder/window-close controls remained unverified;
+the separate acceptance above closes those gaps. Controlled live account
+acceptance, Windows
 release/signing/versioning and any CLI bundling decision are separate milestones.
 Pinned Windows restricted-token socket denial remains unsupported; dedicated
 workers intentionally use trusted host with normal account privileges and Firewall

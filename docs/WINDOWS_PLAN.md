@@ -57,9 +57,13 @@ Thai events, Stop, folder reopen and cooperative bridge close. See
 UNC/device namespaces and reparse workspaces/state are rejected. Ordinary local
 drive paths, spaces, Thai and case aliases are tested; broad long-path/remote
 filesystem support is not certified. No production account acceptance is implied.
-Native folder-dialog interaction and window-manager close require a working
-native GUI automation surface or separate manual acceptance; a fixture picker
-does not prove those native controls.
+The real native folder dialog (including Cancel and workspace replacement) and
+title-bar X passed native manual-action acceptance with automated state/process
+postconditions in the normal release app. Native automation remains unavailable;
+the operator performed only the GUI actions. The separate driver also verified
+cleanup with a fake bridge that ignores shutdown and unrelated-process survival.
+A fixture picker or JavaScript close does not prove those native controls. See
+[Validation](VALIDATION.md) and the [manual-action procedure](MANUAL_GUI_ACCEPTANCE.md#native-manual-actions-with-automated-postconditions).
 
 Controlled live acceptance, Windows release packaging/signing and versioning are
 separate milestones. JV CLI remains separately installed. WSL, updates, terminal

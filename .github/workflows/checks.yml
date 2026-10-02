@@ -34,6 +34,14 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
           rustup default 1.98.1
       - run: npm ci
+      - name: Native GUI acceptance driver syntax (manual actions are opt-in)
+        run: node --check scripts/windows-native-gui-acceptance.mjs
+      - name: Windows GUI process watcher syntax
+        if: runner.os == 'Windows'
+        run: python -B -c "import ast,pathlib; ast.parse(pathlib.Path('scripts/windows-gui-process-watch.py').read_text(encoding='utf-8'))"
+      - name: Linux parse check for Windows-only GUI watcher
+        if: runner.os == 'Linux'
+        run: python3 -B -c "import ast,pathlib; ast.parse(pathlib.Path('scripts/windows-gui-process-watch.py').read_text(encoding='utf-8'))"
       - name: Linux Tauri development libraries (ephemeral runner only)
         if: runner.os == 'Linux'
         run: |

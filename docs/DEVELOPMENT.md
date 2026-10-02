@@ -226,8 +226,13 @@ input or an environment override. Rust fixes the sibling fake-bridge and the
 disposable folder; a missing fixture never falls back to the installed CLI.
 Rebuild without the feature before testing/distributing the real application.
 
-The driver checks the actual bundled WebView and Rust IPC. It does not automate
-the native folder dialog or window-manager close button. Script window close did
-not exit the application; terminating it after cooperative bridge shutdown is
-not counted as native close acceptance. Use the native GUI checklist separately
-when the automation surface is available. Keep all test state/output ignored.
+The WebView driver checks the actual bundled WebView and Rust IPC. It does not
+automate the native folder dialog or window-manager close button. Script window
+close did not exit the application; terminating it after cooperative bridge
+shutdown is not counted as native close acceptance. The separate
+`scripts/windows-native-gui-acceptance.mjs` driver uses the normal release app,
+real native controls and an isolated fake CLI installation. When native GUI
+automation is unavailable, the operator performs only folder selection/Cancel
+and title-bar X actions; all state and process assertions are automated. See
+[native GUI acceptance](MANUAL_GUI_ACCEPTANCE.md#native-manual-actions-with-automated-postconditions).
+Keep all test state/output ignored.
