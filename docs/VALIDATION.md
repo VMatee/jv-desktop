@@ -1,5 +1,79 @@
 # Validation record
 
+## Controlled Windows live acceptance — 2026-10-02
+
+Desktop baseline: `635f16ccc48e47d79900e4f2f506cf4b133255cb`, version
+0.1.1, clean and equal to the freshly fetched feature branch. Its exact-SHA
+[Windows and Linux checks](https://github.com/VMatee/jv-desktop/actions/runs/37028443014)
+passed. The existing normal release executable matched SHA256
+`7f8a53614b1fbab7bc1cf74ac076651f7b32f11c35efbe7907687175ada13a00`;
+no `offline-fixture`, fake CLI or fake service was used. The installed per-user
+CLI reported 0.4.9, with the accepted Codex 0.149.1 and bridge protocol 1.
+Neither product source nor the independent CLI checkout was changed.
+
+The operator explicitly authorized live acceptance and personally entered all
+credentials in Desktop. Native computer-use recovery still failed with OS error
+2. Folder selection, sign-in and native window-close actions were manual; UI
+status, workspace contents and scoped process postconditions were checked locally.
+The temporary observer used only process-local loopback WebView debugging and
+selected UI status fields. It enabled no Network/Fetch event capture, auth tracing,
+IPC interception or screenshots, and disconnected entirely during credential entry.
+
+### Task count and results
+
+**Two real tasks were submitted.** The original allowance was one. Its session
+became ready, but approximately ten minutes passed with only a turn-start entry
+and no command/assistant result. The operator then explicitly requested cancellation
+and one resubmission. Local Stop completed; the first workspace stayed empty.
+The operator closed the app with its native title-bar X: exit code 0, installed
+bridge and all 26 captured owned processes exited. The first remote job's state
+remains **unknown**; no remote cancellation or successful first-job result is claimed.
+
+The additional attempt used a fresh empty folder outside both repositories:
+`C:\Users\Matee\Desktop\NotScan\Work\jv-live-acceptance-retry-20261002-232817`.
+The first folder, `jv-live-acceptance`, was preserved rather than deleting unknown
+state. A new normal Desktop instance and operator-entered login started the fresh
+session. Each attempt had a separate local at-most-once submission marker. No
+third task, benchmark, package installation or production configuration change
+was performed.
+
+| Check | Live evidence |
+| --- | --- |
+| Installed CLI / native backend | **PASS**. Accepted `jvcli.exe` detected; native bridge owned by a Job Object. |
+| Authentication / session | **PASS**. Both operator-entered logins reached Session ready; no credential value was observed. |
+| Trusted host / workspace | **PASS**. Fixed trusted-host policy and the exact canonical disposable workspace displayed. |
+| Second turn / tools | **PASS**. Turn started, three command-start/completion pairs, assistant response and Process finished rendered; Turn complete displayed and Desktop returned to ready. |
+| File / Thai contents | **PASS**. Only `JV_WINDOWS_LIVE_ACCEPTANCE.txt` exists. Strict UTF-8, no BOM, exact two requested lines, CRLF, no trailing newline, 90 bytes. SHA256: `8d56e046da73b9e1830a74bbac31595bd8b9f9e8cc7eda197a6f919da7980311`. |
+| Assistant verification | **PASS**. The displayed reply reports the correct relative path and an exact content match; independent filesystem verification agrees. |
+| Separate `files.changed` activity | **NOT OBSERVED**. The nine rendered activity entries contained commands, assistant and terminal completion, with no file-change entry. |
+| Final native close / cleanup | **PASS**. Operator used the real title-bar X. Desktop exited with code 0; the installed bridge and all 12 processes captured before final close exited. No forced termination or process-name-wide kill was used. Codex was already absent from the owned descendant tree after turn completion. |
+| Credential exposure | **None observed**. Frontend storage lengths were zero. No credential fields, auth traffic, tokens, private state contents, argv/environment secret values or raw stderr were inspected. |
+
+Desktop-specific CLI state remained
+`%LOCALAPPDATA%\com.openjvspace.desktop\jvcli-state`, separate from terminal
+`%LOCALAPPDATA%\JV\jv-cli`. These locations were verified from the established
+launch contract, not by reading credentials or session contents. Account identifiers,
+service responses, authentication bodies and private transcripts are not recorded.
+
+### Remaining live acceptance gap
+
+The verified write/readback used PowerShell shell-file operations; no apply-patch
+command was rendered. Desktop's existing Rust and frontend mappings preserve valid
+`files.changed` frames. This pass did not intercept raw bridge/engine events, so
+the producer-side reason for the missing file-change activity is not proven.
+No event was fabricated or inferred from command text. The successful file write
+and assistant result do **not** satisfy the separately required live `files.changed`
+observation; full controlled Windows live acceptance remains incomplete.
+
+The temporary monitor initially expected a legacy Turn completed activity label.
+Protocol 1 intentionally maps `turn.completed` to Process finished and the
+Turn complete outcome. Completion was therefore independently checked against
+that real UI outcome and the existing source mapping; this is a monitor limitation,
+not evidence of a Desktop completion defect. No extra production task was sent to
+correct the observer. Documentation-only validation uses `git diff --check`;
+new publication still requires exact-SHA Windows/Linux CI. Release packaging,
+signing, versioning and merge remain outside this pass.
+
 ## Windows native GUI acceptance gap closure — 2026-10-02
 
 Baseline: `feature/windows-native` at

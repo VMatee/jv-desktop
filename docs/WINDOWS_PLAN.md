@@ -56,7 +56,9 @@ Thai events, Stop, folder reopen and cooperative bridge close. See
 
 UNC/device namespaces and reparse workspaces/state are rejected. Ordinary local
 drive paths, spaces, Thai and case aliases are tested; broad long-path/remote
-filesystem support is not certified. No production account acceptance is implied.
+filesystem support is not certified. These offline checks alone do not prove
+production account acceptance; the separately authorized controlled live record
+is described below.
 The real native folder dialog (including Cancel and workspace replacement) and
 title-bar X passed native manual-action acceptance with automated state/process
 postconditions in the normal release app. Native automation remains unavailable;
@@ -65,6 +67,16 @@ cleanup with a fake bridge that ignores shutdown and unrelated-process survival.
 A fixture picker or JavaScript close does not prove those native controls. See
 [Validation](VALIDATION.md) and the [manual-action procedure](MANUAL_GUI_ACCEPTANCE.md#native-manual-actions-with-automated-postconditions).
 
-Controlled live acceptance, Windows release packaging/signing and versioning are
-separate milestones. JV CLI remains separately installed. WSL, updates, terminal
+Controlled live testing on 2026-10-02 proved real authentication, a trusted-host
+coding turn, exact UTF-8/Thai file creation/readback and the matching assistant
+result. Both normal native window closes cleaned up their owned bridge/process
+trees. The operator explicitly requested one additional attempt after locally
+stopping the first stalled turn; the first remote job's state remains unknown.
+No separate `files.changed` activity appeared for the successful shell-based
+write, so the full live event-coverage gate remains incomplete. See
+[the controlled live record](VALIDATION.md#controlled-windows-live-acceptance--2026-10-02)
+for evidence and limits. No further real task is authorized by this record.
+
+Windows release packaging/signing and versioning remain separate milestones.
+JV CLI remains separately installed. WSL, updates, terminal
 embedding, PTY/ConPTY and public release are outside this integration pass.
