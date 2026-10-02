@@ -227,7 +227,7 @@ disposable folder; a missing fixture never falls back to the installed CLI.
 Rebuild without the feature before testing/distributing the real application.
 
 The driver checks the actual bundled WebView and Rust IPC. It does not automate
-the native folder dialog or window-manager close button. WebView2 rejects script
-window close; terminating the test process after cooperative bridge shutdown is
+the native folder dialog or window-manager close button. Script window close did
+not exit the application; terminating it after cooperative bridge shutdown is
 not counted as native close acceptance. Use the native GUI checklist separately
 when the automation surface is available. Keep all test state/output ignored.

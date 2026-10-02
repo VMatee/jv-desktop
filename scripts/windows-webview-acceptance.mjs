@@ -88,7 +88,7 @@ try {
   await page.screenshot({path:resolve(cache,'window.png')});
   await pass('cooperative IPC bridge shutdown', async () => { await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('close_bridge')); });
   assert.deepEqual(external,[],'Frontend attempted external network');
-  writeFileSync(resolve(cache,'results.json'), JSON.stringify({ fixture, results, nativeDialog:'Not driven: native computer-use helper unavailable', windowClose:'Not driven: WebView2 rejects script close; process terminated after cooperative bridge close', productionCalls:0 },null,2));
+  writeFileSync(resolve(cache,'results.json'), JSON.stringify({ fixture, results, nativeDialog:'Not driven: native computer-use helper unavailable', windowClose:'Not accepted: script close did not exit Desktop; process terminated after cooperative bridge close', productionCalls:0 },null,2));
 } finally {
   if (browser) await browser.close();
   child.kill();

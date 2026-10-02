@@ -74,7 +74,7 @@ was empty; raw stderr was not rendered. The fixture build cannot fall back to a
 real CLI. Screenshots/state remain ignored in `.cache/gui`.
 
 Native computer-use initialization and documented recovery failed because its
-native pipe is unavailable (OS error 2). WebView2 rejects JavaScript window.close.
+native pipe is unavailable (OS error 2). JavaScript window.close did not exit the app.
 The native folder dialog and window-manager close button are therefore **not
 accepted yet**. The fixed fixture folder and forced test-process exit do not count
 as those native UI checks. Owned parent-death cleanup is independently proven by
@@ -85,8 +85,15 @@ Rust and real-CLI tests.
 Baseline exact-SHA Desktop checks and Linux release checks were green. The new
 workflow runs Windows native fixture/IPC tests plus the actual executable build,
 and retains Linux process/frontend/browser/release regressions with Tauri tests.
-Final feature-SHA CI must be checked after publication; local results do not prove
-it. The initial cached HTTPS identity lacked write access and the GitHub write
+Published runtime checkpoint `cefcfdd405ac9159c5f31585f1ca1fd0d90b88a9` was
+freshly fetched and matched the clean local branch. Exact-SHA Actions run
+[37017410910](https://github.com/VMatee/jv-desktop/actions/runs/37017410910)
+completed successfully for both `Desktop native checks (windows-latest)` and
+`Desktop native checks (ubuntu-24.04)`, including the actual Windows executable
+build and Linux Tauri/browser regressions. Any successor checkpoint must have its
+own exact-SHA checks verified; local results alone do not prove CI success.
+
+The initial cached HTTPS identity lacked write access and the GitHub write
 connector became administrator-disabled. At the operator's explicit request a
 dedicated deploy key was generated outside the checkout, protected for the current
 Windows user only. After the operator added its public key with write access,
@@ -94,8 +101,8 @@ SSH authenticated specifically to `VMatee/jv-desktop`. Only this repository's
 remote/local SSH command changed; no global SSH configuration, private-key read,
 force push or sibling repository modification was used.
 
-Remaining acceptance: native folder/window-close controls and exact-SHA
-Windows/Linux CI after branch publication. Controlled live account acceptance, Windows
+Remaining acceptance: native folder/window-close controls. Controlled live
+account acceptance, Windows
 release/signing/versioning and any CLI bundling decision are separate milestones.
 Pinned Windows restricted-token socket denial remains unsupported; dedicated
 workers intentionally use trusted host with normal account privileges and Firewall
