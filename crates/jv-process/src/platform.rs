@@ -1,4 +1,6 @@
-//! All OS process-tree semantics live here. Windows execution is gated.
+//! OS process-tree ownership and pipe semantics live behind this boundary.
+#[cfg(target_os = "windows")]
+pub(crate) mod windows;
 #[cfg(target_os = "linux")]
 mod linux {
     use std::{

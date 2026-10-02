@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::{ipc::Channel, Manager};
+#[cfg(not(feature = "offline-fixture"))]
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Default)]
@@ -31,20 +32,53 @@ fn home_directory() -> Option<PathBuf> {
     }
 }
 
+fn backend_program(workspace: Option<&std::path::Path>) -> Result<PathBuf, ErrorCategory> {
+    #[cfg(feature = "offline-fixture")]
+    {
+        let _ = workspace;
+        // Opt-in acceptance build only. The frontend/environment cannot select
+        // an executable; this build can never fall back to the installed CLI.
+        let p = app_directory()?.join(if cfg!(target_os = "windows") {
+            "fake-bridge.exe"
+        } else {
+            "fake-bridge"
+        });
+        jv_desktop_process::canonical_path(&p).map_err(|_| ErrorCategory::Unavailable)
+    }
+    #[cfg(not(feature = "offline-fixture"))]
+    {
+        jv_desktop_process::resolve_native_cli(workspace).ok_or(ErrorCategory::Unavailable)
+    }
+}
+
 #[tauri::command]
 async fn choose_workspace(app: tauri::AppHandle) -> Result<Option<String>, ErrorCategory> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(chosen) = app
-            .dialog()
-            .file()
-            .set_title("Open a project folder")
-            .blocking_pick_folder()
-        else {
-            return Ok(None);
+        #[cfg(feature = "offline-fixture")]
+        let path = {
+            // Acceptance builds use one Rust-selected disposable project. This
+            // is never enabled in the normal application or CI production build.
+            let path = app_directory()?
+                .parent()
+                .ok_or(ErrorCategory::Internal)?
+                .join("workspace/success");
+            std::fs::create_dir_all(&path).map_err(|_| ErrorCategory::Internal)?;
+            path
         };
-        let path = chosen
-            .into_path()
-            .map_err(|_| ErrorCategory::InvalidWorkspace)?;
+        #[cfg(not(feature = "offline-fixture"))]
+        let path = {
+            let Some(chosen) = app
+                .dialog()
+                .file()
+                .set_title("Open a project folder")
+                .blocking_pick_folder()
+            else {
+                return Ok(None);
+            };
+            chosen
+                .into_path()
+                .map_err(|_| ErrorCategory::InvalidWorkspace)?
+        };
         let canonical = validate_workspace(&path, home_directory().as_deref(), &app_directory()?)?;
         let display = canonical
             .to_str()
@@ -72,35 +106,45 @@ struct BackendStatus {
     availability: &'static str,
     can_run: bool,
     detail: String,
+    execution_mode: &'static str,
 }
 
 #[tauri::command]
 async fn detect_backend() -> BackendStatus {
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         BackendStatus {
             availability: "unsupported",
             can_run: false,
-            detail: "Native JV CLI is currently Linux-only. Use the offline demo on this platform."
-                .into(),
+            detail: "Native JV CLI is unavailable on this platform. Use the offline demo.".into(),
+            execution_mode: "unavailable",
         }
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         let result = tauri::async_runtime::spawn_blocking(|| {
-            let paths = std::env::var_os("PATH").ok_or(ErrorCategory::Unavailable)?;
-            let program = jv_desktop_process::resolve_executable("jvcli", &paths)
-                .ok_or(ErrorCategory::Unavailable)?;
+            let program = backend_program(None)?;
             jv_desktop_process::bridge::version(program, app_directory()?)
         })
         .await;
         match result {
             Ok(Ok(version)) => BackendStatus { availability: "detected", can_run: true,
+                execution_mode: execution_mode(),
                 detail: format!("{version} · Bridge protocol 1. Sign in after selecting a workspace. Detection does not verify service health.") },
-            Ok(Err(ErrorCategory::UpgradeRequired)) => BackendStatus {availability:"upgrade-required",can_run:false,detail:"Upgrade JV CLI to 0.4.9 or newer. No legacy execution fallback is available.".into()},
-            Ok(Err(ErrorCategory::Timeout)) => BackendStatus {availability:"unavailable",can_run:false,detail:"JV CLI version check timed out.".into()},
-            _ => BackendStatus {availability:"unavailable",can_run:false,detail:"Install JV CLI 0.4.9 or newer for Linux, then check again.".into()},
+            Ok(Err(ErrorCategory::UpgradeRequired)) => BackendStatus {availability:"upgrade-required",can_run:false,execution_mode:execution_mode(),detail:"Upgrade JV CLI to 0.4.9 or newer. No legacy execution fallback is available.".into()},
+            Ok(Err(ErrorCategory::Timeout)) => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),detail:"JV CLI version check timed out.".into()},
+            _ => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),detail:"Install the native JV CLI 0.4.9 or newer, then check again.".into()},
         }
+    }
+}
+fn execution_mode() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "trusted-host"
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "sandboxed"
     }
 }
 
@@ -221,9 +265,7 @@ async fn open_bridge(app: tauri::AppHandle) -> Result<(), ErrorCategory> {
             .map_err(|_| ErrorCategory::Internal)?
             .clone()
             .ok_or(ErrorCategory::InvalidWorkspace)?;
-        let paths = std::env::var_os("PATH").ok_or(ErrorCategory::Unavailable)?;
-        let program = jv_desktop_process::resolve_executable("jvcli", &paths)
-            .ok_or(ErrorCategory::Unavailable)?;
+        let program = backend_program(Some(&selected))?;
         let data = app
             .path()
             .app_local_data_dir()
@@ -249,6 +291,7 @@ async fn authenticate(
     request: LoginRequest,
     state: tauri::State<'_, DesktopState>,
 ) -> Result<(), ErrorCategory> {
+    jv_desktop_process::bridge::policy(request.permissions)?;
     let bridge = state
         .bridge
         .lock()
@@ -291,5 +334,5 @@ pub fn run() {
             }
         });
 }
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
 mod tests;

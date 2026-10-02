@@ -29,6 +29,18 @@ normal contributor machine, an already-installed compatible Rust toolchain is
 also supported. Do not install system packages or global toolchains as part of
 automated Desktop work; document missing host prerequisites instead.
 
+On Windows with repository-local Node at `.tools/node`, use this process-local
+PowerShell setup (MSVC/Windows SDK and WebView2 must already be available):
+
+```powershell
+$env:PATH = "$PWD\.tools\node;$env:PATH"
+npm ci
+npm run tauri -- dev
+```
+
+The Windows Rust shims are under `.cache/cargo/bin` and the toolchain under
+`.tools/rustup`; the existing wrapper selects them without changing global tools.
+
 ## Install and run offline
 
 From the repository root:
@@ -68,14 +80,15 @@ and fake bridge tests. Live acceptance requires separate authorization.
 | `npm run build` | TypeScript plus production frontend assets, not a desktop bundle |
 | `npm run rust:fmt` | Rust formatting across both crates |
 | `npm run rust:check` | Standalone process core, no GUI libraries |
-| `npm run rust:test` | Core unit tests and Linux fake-executable integration tests |
+| `npm run rust:test` | Core and shared fake-executable tests; native Linux process groups or Windows Jobs/pipes |
 | `npm run rust:clippy` | Core and fixture linting, warnings denied |
 | `npm run browser:install` | Download a repository-local Chromium headless shell; no OS packages |
 | `npm run test:e2e` | Offline browser workflow, Stop, native blocker and responsive layout |
 | `npm run tauri:check` | Compile/type-check native Tauri code; requires GUI development libraries |
-| `npm run tauri:test` | Linux registered-command/ACL tests using Tauri MockRuntime; needs native libraries, no display or CLI |
+| `npm run tauri:test` | Linux/Windows registered IPC/ACL safety using MockRuntime; no display or real CLI |
 | `npm run tauri -- build --bundles deb,rpm` | Production Linux executable plus Debian/RPM packages, no installation or publication |
 | `npm run tauri -- build --no-bundle` | Compile native executable; requires full host prerequisites |
+| `npm run tauri -- build --bundles nsis` | Unsigned development Windows executable/installer; no installation or publication |
 
 The host now passes native compilation, Debian/RPM/AppImage packaging and
 offline browser acceptance. X11 access is available and the native shell has
@@ -87,6 +100,8 @@ All Cargo scripts put downloads in `.cache/cargo`, temporary files in `.cache/tm
 and compiled artifacts in `target`. npm uses `.cache/npm`. Browser downloads live
 in `.cache/ms-playwright`, screenshots in `test-results`. These are ignored.
 Never stage them, account files, `.env` files or private test evidence.
+Tauri bundler tools use `target/.tauri` (`useLocalToolsDir=true`), keeping Windows
+NSIS/WiX build downloads inside the checkout as well.
 
 ## Fake executable
 
@@ -112,14 +127,11 @@ scenario is needed. Do not use a production task as a build or publication check
 
 ## CI
 
-GitHub Actions runs frontend checks and Rust core checks on Ubuntu and Windows.
-Linux additionally exercises real fixture process-group cancellation and the
-browser workflow. Windows builds the fake fixture but does not run Linux-only
-process integration tests; shared validation tests run on both platforms.
-
-A separate Windows step checks the Tauri crate with the runner's MSVC tooling.
-It validates the desktop shell's build, not native Windows JV functionality.
-Linux full GUI compilation requires a separately provisioned runner. Actions
+GitHub Actions runs frontend, process core, bridge and registered Tauri IPC checks
+on Ubuntu and Windows. Windows runs real native fixture Job/pipe lifecycle tests
+and builds the actual Desktop executable. Linux retains process-group tests,
+offline release-asset tests and browser acceptance, with Tauri libraries installed
+only on the ephemeral runner. Actions
 use pinned revisions, a read-only repository token with credential persistence
 disabled, and no JV credentials/deploy keys. The tag-only Linux release workflow requires successful main checks, builds on
 Ubuntu 22.04, and publishes packages/checksums using the scoped GitHub token.
@@ -175,3 +187,47 @@ database. Test extracted executable/AppImage with isolated XDG paths and no netw
 Package-manager install/remove instructions are user operations, not automated
 permission to use sudo on a developer machine. No custom install/remove hooks or
 user-state deletion are included. Close the app before upgrading/removing it.
+
+## Windows native acceptance (offline)
+
+The accepted external CLI remains separate. Ordinary tests never discover it.
+To explicitly smoke-test the installed CLI through Desktop's Rust process layer:
+
+```powershell
+py -3.10 -B scripts/windows-native-smoke.py
+```
+
+This uses native Jobs, strict child environment, disposable Desktop-specific
+state and a synthetic loopback HTTP 401 fixture. It verifies local readiness,
+shutdown, owner death and state protection, without real account/token/job or
+inference. It does not test production authentication. Do not change the CLI
+repository or use an unverified installer to satisfy this test.
+
+Actual Tauri WebView acceptance uses the existing Playwright dependency and
+process-local loopback WebView2 debugging; no system browser install is required:
+
+```powershell
+npm run tauri -- build --no-bundle
+node scripts/windows-webview-acceptance.mjs "$PWD\target\release\jv-desktop.exe"
+```
+
+For synthetic sign-in and turns, build the explicit acceptance-only feature:
+
+```powershell
+npm run rust:test
+npm run tauri -- build --no-bundle --features offline-fixture
+# Copy this executable and target\debug\fake-bridge.exe to an ignored
+# .cache\gui\fixture-app directory before running the acceptance driver.
+node scripts/windows-webview-acceptance.mjs "$PWD\.cache\gui\fixture-app\jv-desktop.exe" --fixture
+```
+
+`offline-fixture` is off by default and never selects an executable from frontend
+input or an environment override. Rust fixes the sibling fake-bridge and the
+disposable folder; a missing fixture never falls back to the installed CLI.
+Rebuild without the feature before testing/distributing the real application.
+
+The driver checks the actual bundled WebView and Rust IPC. It does not automate
+the native folder dialog or window-manager close button. WebView2 rejects script
+window close; terminating the test process after cooperative bridge shutdown is
+not counted as native close acceptance. Use the native GUI checklist separately
+when the automation surface is available. Keep all test state/output ignored.

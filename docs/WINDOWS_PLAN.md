@@ -1,45 +1,66 @@
-# Windows plan
+# Windows native integration
 
-The Tauri/React UI, permission model, normalized events and `JvBackend` contract
-are shared between Linux and Windows. This does not imply that a Windows CLI
-backend exists. The currently official JV CLI is Linux-only.
+Target: AMD64 dedicated JV worker PCs, using an ordinary Windows account and
+WebView2. The native backend is implemented on `feature/windows-native`; Desktop
+remains version 0.1.1 and this is not a published Windows production release.
 
-## Foundation behavior
+## Execution contract
 
-Windows can use the offline demo and native folder selection once the desktop
-shell is built. Native backend detection returns **unsupported** with a clear
-message; it does not try to run a Linux executable or guess WSL configuration.
-The process core has an isolated Windows unsupported branch. POSIX signals,
-process groups and wait semantics are compiled only on Linux.
+```text
+React → JvBackend → Tauri IPC → Rust BridgeSupervisor
+      → installed jvcli.exe bridge --stdio --execution-mode trusted-host
+      → shared bridge protocol 1
+```
 
-The Windows CI step checks shell compilation on an actual Windows runner. That
-is not proof of a working native JV backend, an installed WebView2 runtime on
-every target machine, a signed installer or live acceptance. No Windows installer
-or release is part of this phase.
+The external CLI must be 0.4.9 or newer; the accepted Windows dependency is CLI
+checkpoint `4a00ee480db70d5bcac619d95afa64056cd1905c`, with Codex 0.149.1.
+Desktop does not copy, rebuild, bundle, update or silently install JV CLI.
+Resolution prefers `%LOCALAPPDATA%\Programs\JV CLI\jvcli.exe`, then absolute
+PATH entries. It excludes current/project directories and reparse/UNC/device
+candidates. Detection checks only local version/readiness, not service health.
 
-## Later milestones
+Windows Native JV CLI always displays **Trusted host**: full filesystem access,
+network enabled, no tool approval prompts. Tools run with the dedicated account's
+normal privileges. Incompatible permission controls are hidden and conflicting
+IPC policies are rejected. Session responses must confirm danger-full-access and
+network true. Linux retains its existing sandboxed permission controls and args.
 
-1. A Windows preview may offer an explicitly selected WSL2 compatibility backend.
-   Review path translation, distribution selection, permissions, authentication
-   and process ownership. No automatic WSL installation or distribution mutation.
-2. The final goal is an official native Windows JV CLI. Treat its CLI/bridge
-   protocol as an external compatibility contract rather than embedding its code.
-3. Implement Windows process lifecycle using native semantics, including Job
-   Objects/owned child handles, pipe draining, cancellation, app-close cleanup
-   and verification of descendants. Do not port `killpg` or scatter OS checks
-   through React components.
-4. Test UTF-16/UTF-8 paths, drive roots, UNC/extended paths, spaces, Thai input,
-   executable discovery, blocked sign-in and missing-backend recovery.
+Windows restricted-token network-denied execution remains unsupported with the
+pinned Codex 0.149.1 backend. Trusted host is intentional unrestricted authority,
+never a fallback after isolation failure. Administrator, services, sandbox-account
+provisioning and Firewall/WFP changes are not required. Keep Windows Firewall on.
 
-A future interactive terminal would use **ConPTY** on Windows and **PTY** on
-Linux. An integrated terminal is not part of this phase. There is no xterm.js,
-PTY, ConPTY, embedded shell, terminal scraping or arbitrary shell execution UI.
+## Desktop ownership
 
-The existing `jvcli-windows` sibling repository must remain unchanged during
-Desktop work. Its contents are not copied, built, modified or presented as an
-implemented Desktop backend. WSL automation, code signing, installers/releases,
-auto-updates and terminal work require separate milestones.
+Desktop sets a separate absolute
+`%LOCALAPPDATA%\com.openjvspace.desktop\jvcli-state` child. JV CLI creates and
+protects its own private state; Desktop does not duplicate Windows ACL logic.
+Terminal CLI state at `%LOCALAPPDATA%\JV\jv-cli` is not reused.
 
-Future bridge state will use Tauri app_local_data_dir()/jvcli-state on Windows,
-with Windows-specific private-directory and owned-process semantics. Linux
-protocol 1 integration does not enable native Windows or WSL execution.
+Native creation establishes an anonymous kill-on-close Job before bridge code
+runs. Descendants and nested CLI Jobs remain owned, with no breakaway fallback.
+Only private stdio handles are inherited. Bounded native pipe reads/writes,
+deadlines, correlation, cancellation and normalized protocol behavior are shared
+with Linux. Shutdown is cooperative, followed by owned Job cleanup when necessary.
+Unrelated processes are never selected by name or terminated.
+
+## Validation and next steps
+
+Ordinary tests use native fake executables and synthetic accounts. The opt-in
+installed CLI smoke covers version, ready, exact workspace/state, nested Job
+ownership, shutdown, owner death and a loopback-only rejected login. Actual Tauri
+WebView acceptance covers rendered UI, real CLI detection and fixture sign-in,
+Thai events, Stop, folder reopen and cooperative bridge close. See
+[Validation](VALIDATION.md) for exact coverage and limits and
+[Development](DEVELOPMENT.md) for commands.
+
+UNC/device namespaces and reparse workspaces/state are rejected. Ordinary local
+drive paths, spaces, Thai and case aliases are tested; broad long-path/remote
+filesystem support is not certified. No production account acceptance is implied.
+Native folder-dialog interaction and window-manager close require a working
+native GUI automation surface or separate manual acceptance; a fixture picker
+does not prove those native controls.
+
+Controlled live acceptance, Windows release packaging/signing and versioning are
+separate milestones. JV CLI remains separately installed. WSL, updates, terminal
+embedding, PTY/ConPTY and public release are outside this integration pass.

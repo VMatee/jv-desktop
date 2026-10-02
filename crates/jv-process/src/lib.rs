@@ -66,10 +66,10 @@ pub fn validate_workspace(
     if !path.is_absolute() {
         return Err(ErrorCategory::InvalidWorkspace);
     }
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| ErrorCategory::InvalidWorkspace)?;
-    let same_as = |other: &Path| other.canonicalize().is_ok_and(|p| p == canonical);
+    #[cfg(target_os = "windows")]
+    platform::windows::no_reparse(path).map_err(|_| ErrorCategory::InvalidWorkspace)?;
+    let canonical = canonical_path(path).map_err(|_| ErrorCategory::InvalidWorkspace)?;
+    let same_as = |other: &Path| canonical_path(other).is_ok_and(|p| p == canonical);
     if !canonical.is_dir()
         || canonical.parent().is_none()
         || home.is_some_and(same_as)
@@ -78,6 +78,70 @@ pub fn validate_workspace(
         return Err(ErrorCategory::InvalidWorkspace);
     }
     Ok(canonical)
+}
+
+pub fn canonical_path(path: &Path) -> std::io::Result<PathBuf> {
+    let path = path.canonicalize()?;
+    #[cfg(target_os = "windows")]
+    {
+        platform::windows::local_path(&path)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(path)
+    }
+}
+
+/// Rust-owned fixed executable resolution. Windows prefers the per-user install;
+/// no current-directory, project-tree or relative PATH lookup is permitted.
+pub fn resolve_native_cli(workspace: Option<&Path>) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH").unwrap_or_default();
+    #[cfg(target_os = "windows")]
+    {
+        let default = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .map(|p| p.join("Programs/JV CLI/jvcli.exe"));
+        let cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| canonical_path(&p).ok());
+        resolve_windows_cli(default, &paths, cwd.as_deref(), workspace)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = workspace;
+        resolve_executable("jvcli", &paths)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_cli(
+    default: Option<PathBuf>,
+    paths: &std::ffi::OsStr,
+    cwd: Option<&Path>,
+    workspace: Option<&Path>,
+) -> Option<PathBuf> {
+    default
+        .into_iter()
+        .chain(
+            std::env::split_paths(paths)
+                .filter(|p| p.is_absolute())
+                .map(|p| p.join("jvcli.exe")),
+        )
+        .find_map(|p| {
+            platform::windows::no_reparse(&p).ok()?;
+            if !p.is_file() {
+                return None;
+            }
+            let p = canonical_path(&p).ok()?;
+            // An absolute install under a drive/home root is not cwd lookup.
+            // Reject the actual cwd entry and every selected-project candidate.
+            if cwd.is_some_and(|w| p.parent() == Some(w))
+                || workspace.is_some_and(|w| p.starts_with(w))
+            {
+                return None;
+            }
+            Some(p)
+        })
 }
 
 /// Explicit native gate: public exec requires argv prompts and noninteractive
@@ -119,6 +183,38 @@ pub fn resolve_executable(name: &str, paths: &std::ffi::OsStr) -> Option<PathBuf
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_resolver_prefers_install_and_excludes_cwd_relative_and_project_paths() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/tmp/resolver")
+            .join(format!("{}", std::process::id()));
+        let installed = root.join("Programs/JV CLI");
+        let fallback = root.join("fallback");
+        let project = root.join("project");
+        for dir in [&installed, &fallback, &project] {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::copy(std::env::current_exe().unwrap(), dir.join("jvcli.exe")).unwrap();
+        }
+        let root = canonical_path(&root).unwrap();
+        let installed = canonical_path(&installed).unwrap().join("jvcli.exe");
+        let fallback = canonical_path(&fallback).unwrap();
+        let project = canonical_path(&project).unwrap();
+        let paths = std::env::join_paths([Path::new("."), &project, &fallback]).unwrap();
+        let drive = root.ancestors().last().unwrap();
+        assert_eq!(
+            resolve_windows_cli(Some(installed.clone()), &paths, Some(drive), Some(&project)),
+            Some(installed)
+        );
+        assert_eq!(
+            resolve_windows_cli(None, &paths, Some(&project), Some(&project)),
+            Some(fallback.join("jvcli.exe"))
+        );
+        let unsafe_paths = std::env::join_paths([Path::new("."), &project, &fallback]).unwrap();
+        assert!(
+            resolve_windows_cli(None, &unsafe_paths, Some(&fallback), Some(&project)).is_none()
+        );
+    }
     #[test]
     fn permission_matrix_and_gate() {
         for (access, network, flag) in [

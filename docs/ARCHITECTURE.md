@@ -5,7 +5,7 @@ React chat / activity / memory-only sign-in
   → JvBackend interface + normalized DesktopEvent
     → Offline MockBackend OR TauriBackend commands/channels
       → Rust BridgeSupervisor
-        → installed jvcli bridge --stdio (Linux, CLI >= 0.4.9, protocol 1)
+        → installed JV CLI (Linux / Windows AMD64, CLI >= 0.4.9, protocol 1)
           → existing JV service (only after explicit user sign-in)
 ```
 
@@ -21,7 +21,9 @@ neither is the native UI execution path. There is no argv-prompt fallback.
 - `src/lib/tauri-backend.ts`: IPC, password request lifetime, per-run channels.
 - `src/lib/bridge-events.ts`: validated presentation mapping of bridge fields.
 - `crates/jv-process/src/bridge.rs`: fixed-argument child, protocol, state and limits.
-- `platform.rs`: Linux process-group ownership; Windows execution unsupported.
+- `platform.rs`: Linux process-group ownership; `platform/windows.rs`: native
+  Windows Job ownership, process creation, UTF-16 arguments and bounded pipes.
+- `bridge_transport.rs`: shared NDJSON framing/correlation with isolated native I/O.
 - `src-tauri`: native folder picker, command allowlist, application-owned supervisor.
 
 One bridge belongs to one explicitly selected canonical workspace. Rust remembers
@@ -34,23 +36,30 @@ Selecting a folder does not create or edit project files.
 `JVCLI_HOME` is the Tauri local application data directory plus `jvcli-state`.
 On Linux this normally resolves to
 `~/.local/share/com.openjvspace.desktop/jvcli-state/`. It is created with mode 0700,
-with symlink ancestors rejected. Terminal CLI state is not reused. A future Windows
-backend will use the same application-data API with Windows-native path/security
-semantics, not a hardcoded Linux path.
+with symlink ancestors rejected. Windows normally resolves to
+`%LOCALAPPDATA%\com.openjvspace.desktop\jvcli-state`. Desktop rejects reparse
+ancestors and supplies the absolute child path without pre-creating it; JV CLI
+creates/protects its private state when needed. Terminal CLI state is not reused.
+No Windows chmod approximation or duplicate ACL implementation is used.
 
 The supervisor owns the child and all pipes. A mutex serializes protocol I/O;
 blocking work runs outside the async UI thread. Cancellation and stopping are
 atomic signals, so Stop does not wait for the turn I/O mutex. Auth and session
-setup are synchronous with bounded deadlines. The UI locks permissions after
+setup have bounded deadlines and observe shutdown; a stopped operation cannot
+install a late result. The UI locks Linux permissions after
 session creation; reopening the folder creates a new session policy. Request IDs
 are Rust-generated; session and turn IDs remain in Rust. UI run IDs discard stale
 channel callbacks. There is one active turn, no task queue, no Desktop resume yet.
 
 ## Transport and limits
 
-Child argv is exactly `bridge --stdio`; passwords/prompts use NDJSON stdin.
-Environment is cleared, then receives only filtered absolute PATH, HOME, fixed
-locale/Python isolation settings and Desktop-owned JVCLI_HOME. Detection uses
+Linux argv is exactly `bridge --stdio`. Windows argv is exactly
+`bridge --stdio --execution-mode trusted-host`; passwords/prompts use NDJSON stdin.
+Environment is cleared. Linux receives filtered absolute PATH, HOME, fixed
+locale/Python isolation settings and Desktop-owned JVCLI_HOME. Windows receives
+only reviewed absolute SYSTEMROOT, WINDIR, USERPROFILE, LOCALAPPDATA, TEMP, TMP,
+filtered absolute PATH and explicit JVCLI_HOME. APPDATA, COMSPEC, PATHEXT, proxy,
+credential and Python injection variables are not inherited. Detection uses
 `--version` with a3-second timeout. Readiness must identify protocol 1, a compatible
 CLI version and the exact workspace before credentials can be sent.
 
@@ -62,8 +71,17 @@ application event queue exists. Unknown future event types are ignored within
 these limits; malformed known frames, unexpected correlation, EOF and overflow
 fail safely and close the supervisor. Raw errors/stderr never cross IPC.
 
+Linux pipes remain nonblocking. Windows has one owner per synchronous pipe,
+uses PeekNamedPipe before bounded reads, and a bounded one-element completion
+channel for the sole stdin writer. A write deadline terminates only the owned
+Job, cancels synchronous writer I/O and joins its thread; no writer is detached.
+CreateProcessW uses an explicit stdio handle list and atomic Job-list attribute,
+with no retry outside ownership. Kill-on-Job-close and absent breakaway flags
+contain child/grandchild and nested CLI Jobs, including Desktop owner death.
+
 Deadlines: ready 5s, pipe write 3s, auth 40s, session 15s, turn 1hour, cancellation 20s.
-Shutdown requests `bridge.shutdown` and waits 8s, then signals only the owned bridge
+Shutdown requests `bridge.shutdown` and waits 8s. Windows then terminates the
+owned Job and waits at most 5s for its root. Linux signals only the owned bridge
 process group with TERM (20s grace), finally KILL/reap if necessary. The reviewed
 bridge owns cleanup of its engine, which creates a separate session. Forced
 termination after a pathological bridge hang cannot prove detached descendants
@@ -84,5 +102,10 @@ or remote work have stopped. No unrelated CLI PID is selected or killed.
 
 React does not consume raw engine JSON. The legacy JSONL parser remains for the
 original process fixtures; native bridge frames follow the separate protocol 1
-mapping. Windows shares UI/contracts but returns unsupported for real execution.
+mapping. Structured backend status declares `executionMode`: Linux `sandboxed`,
+Windows `trusted-host`. React never parses security behavior from status prose.
+Windows hides incompatible controls and fixes workspace-write/network-true IPC;
+Rust independently rejects conflicts and requires danger-full-access/network-true
+session responses. Linux rejects unexpected full-access responses and retains its
+existing permission model. Desktop does not impose Windows filesystem sandboxing.
 Images, resume, PTY/ConPTY, terminal embedding and WSL are deferred.

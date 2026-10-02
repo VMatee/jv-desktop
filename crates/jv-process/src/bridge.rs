@@ -18,7 +18,9 @@ pub fn compatible(version: &str) -> bool {
     matches!(parts.as_slice(), [Ok(a), Ok(b), Ok(c)] if (*a,*b,*c) >= (0,4,9))
 }
 pub fn policy(p: Permissions) -> Result<Value, E> {
-    if p.access == Access::ReadOnly && p.network {
+    if (p.access == Access::ReadOnly && p.network)
+        || (cfg!(target_os = "windows") && (p.access != Access::WorkspaceWrite || !p.network))
+    {
         return Err(E::PermissionConflict);
     }
     Ok(json!({"read_only":p.access == Access::ReadOnly,"allow_network":p.network}))
@@ -57,12 +59,12 @@ pub struct BridgeSupervisor {
 }
 impl BridgeSupervisor {
     pub fn start(program: PathBuf, workspace: PathBuf, state: PathBuf) -> Result<Self, E> {
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         {
             let _ = (program, workspace, state);
             Err(E::UnsupportedPlatform)
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
             version(program.clone(), workspace.clone())?;
             let mut transport = Transport::spawn(program, workspace.clone(), state)?;
@@ -108,17 +110,32 @@ impl BridgeSupervisor {
             return Err(E::AuthenticationRequired);
         }
         let mut request = json!({"type":"auth.login","username":username,"base_url":base_url,"password":password});
-        let result = t.exchange(&mut request, "auth.succeeded", Duration::from_secs(40));
+        let result = t.exchange(
+            &mut request,
+            "auth.succeeded",
+            Duration::from_secs(40),
+            &self.stopping,
+        );
         request = Value::Null;
         drop(request); // best effort reference removal, not secure erasure
         result?;
         let mut request = policy.clone();
         request["type"] = json!("session.start");
-        let response = t.exchange(&mut request, "session.started", Duration::from_secs(15))?;
-        if response["session_id"].as_str().is_none()
+        let response = t.exchange(
+            &mut request,
+            "session.started",
+            Duration::from_secs(15),
+            &self.stopping,
+        )?;
+        if self.stopping.load(Ordering::Acquire) {
+            return Err(E::ProcessFailed);
+        }
+        if response["session_id"].as_str().is_none_or(|s| !valid_id(s))
             || response["network"] != policy["allow_network"]
             || response["sandbox"]
-                != if permissions.access == Access::ReadOnly {
+                != if cfg!(target_os = "windows") {
+                    "danger-full-access"
+                } else if permissions.access == Access::ReadOnly {
                     "read-only"
                 } else {
                     "workspace-write"
@@ -138,17 +155,19 @@ impl BridgeSupervisor {
         mut emit: impl FnMut(Value) -> Result<(), E>,
     ) -> Result<(), E> {
         crate::validate_prompt(&prompt)?;
+        let requested_policy = policy(permissions)?;
         let mut t = self.inner.try_lock().map_err(|_| E::ProcessFailed)?;
         if !t.authenticated || self.stopping.load(Ordering::Acquire) {
             return Err(E::AuthenticationRequired);
         }
-        if t.policy.as_ref() != Some(&policy(permissions)?) {
+        if t.policy.as_ref() != Some(&requested_policy) {
             return Err(E::PermissionConflict);
         }
         self.cancel.store(false, Ordering::Release);
         let request = t.send(json!({"type":"turn.start","text":prompt}))?;
         let mut turn = None;
         let mut cancel_sent = false;
+        let mut cancel_request = None;
         let mut count = 0;
         let mut bytes = 0usize;
         let start = std::time::Instant::now();
@@ -162,7 +181,7 @@ impl BridgeSupervisor {
             }
             if self.cancel.load(Ordering::Acquire) && !cancel_sent {
                 if let Some(id) = &turn {
-                    t.send(json!({"type":"turn.cancel","turn_id":id}))?;
+                    cancel_request = Some(t.send(json!({"type":"turn.cancel","turn_id":id}))?);
                     cancel_sent = true;
                     cancelled_at = Some(std::time::Instant::now());
                 }
@@ -199,6 +218,12 @@ impl BridgeSupervisor {
                 continue;
             }
             if typ == "turn.cancel.accepted" {
+                if !cancel_sent
+                    || frame["request_id"].as_str() != cancel_request.as_deref()
+                    || frame["turn_id"].as_str() != turn.as_deref()
+                {
+                    return Err(E::ProtocolError);
+                }
                 continue;
             }
             if !matches!(
@@ -227,6 +252,14 @@ impl BridgeSupervisor {
             }
             emit(normalized)?;
         }
+    }
+    /// Test-only ownership evidence; never exposed by frontend IPC.
+    #[cfg(all(
+        feature = "test-fixture",
+        any(target_os = "linux", target_os = "windows")
+    ))]
+    pub fn bridge_pid(&self) -> u32 {
+        self.inner.lock().unwrap().pid()
     }
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Release);
@@ -289,257 +322,33 @@ fn normalize(v: &Value) -> Result<Value, E> {
     })
 }
 
-#[cfg(target_os = "linux")]
-use linux::Transport;
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use transport::Transport;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[path = "bridge_transport.rs"]
+mod transport;
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 struct Transport {
     authenticated: bool,
     policy: Option<Value>,
     session: Option<String>,
 }
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 impl Transport {
     fn poll(&mut self) -> Result<Option<Value>, E> {
         Err(E::UnsupportedPlatform)
     }
-    fn send(&mut self, _v: Value) -> Result<String, E> {
+    fn send(&mut self, _: Value) -> Result<String, E> {
         Err(E::UnsupportedPlatform)
     }
-    fn exchange(&mut self, _v: &mut Value, _s: &str, _d: Duration) -> Result<Value, E> {
+    fn exchange(
+        &mut self,
+        _: &mut Value,
+        _: &str,
+        _: Duration,
+        _: &AtomicBool,
+    ) -> Result<Value, E> {
         Err(E::UnsupportedPlatform)
     }
     fn shutdown(&mut self) {}
-}
-
-#[cfg(target_os = "linux")]
-mod linux {
-    use super::*;
-    use crate::platform;
-    use std::{
-        io::{Read, Write},
-        process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
-        time::Instant,
-    };
-    pub(super) struct Transport {
-        child: Child,
-        input: ChildStdin,
-        output: ChildStdout,
-        error: ChildStderr,
-        pending: Vec<u8>,
-        stderr_bytes: usize,
-        sequence: u64,
-        closed: bool,
-        pub authenticated: bool,
-        pub policy: Option<Value>,
-        pub session: Option<String>,
-    }
-    impl Transport {
-        pub fn spawn(program: PathBuf, workspace: PathBuf, state: PathBuf) -> Result<Self, E> {
-            use std::os::unix::fs::PermissionsExt;
-            if !program.is_absolute() || !workspace.is_absolute() || !state.is_absolute() {
-                return Err(E::InvalidWorkspace);
-            }
-            for p in state.ancestors() {
-                if p.symlink_metadata()
-                    .is_ok_and(|m| m.file_type().is_symlink())
-                {
-                    return Err(E::InvalidWorkspace);
-                }
-            }
-            std::fs::create_dir_all(&state).map_err(|_| E::Internal)?;
-            std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700))
-                .map_err(|_| E::Internal)?;
-            let mut c = Command::new(program);
-            c.args(["bridge", "--stdio"])
-                .current_dir(workspace)
-                .env_clear()
-                .env("LANG", "C.UTF-8")
-                .env("PYTHONDONTWRITEBYTECODE", "1")
-                .env("PYTHONNOUSERSITE", "1")
-                .env("JVCLI_HOME", &state)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            if let Some(home) = std::env::var_os("HOME") {
-                c.env("HOME", home);
-            }
-            if let Some(path) = std::env::var_os("PATH") {
-                let paths: Vec<_> = std::env::split_paths(&path)
-                    .filter(|p| p.is_absolute())
-                    .collect();
-                if let Ok(p) = std::env::join_paths(paths) {
-                    c.env("PATH", p);
-                }
-            }
-            platform::configure(&mut c);
-            let mut child = c.spawn().map_err(|_| E::Unavailable)?;
-            let input = child.stdin.take().unwrap();
-            let output = child.stdout.take().unwrap();
-            let error = child.stderr.take().unwrap();
-            let t = Self {
-                child,
-                input,
-                output,
-                error,
-                pending: Vec::new(),
-                stderr_bytes: 0,
-                sequence: 0,
-                closed: false,
-                authenticated: false,
-                policy: None,
-                session: None,
-            };
-            platform::nonblocking(&t.input).map_err(|_| E::ProcessFailed)?;
-            platform::nonblocking(&t.output).map_err(|_| E::ProcessFailed)?;
-            platform::nonblocking(&t.error).map_err(|_| E::ProcessFailed)?;
-            Ok(t)
-        }
-        pub fn send(&mut self, mut value: Value) -> Result<String, E> {
-            if self.closed {
-                return Err(E::ProcessFailed);
-            }
-            self.sequence += 1;
-            let id = format!("desktop_{}", self.sequence);
-            value["request_id"] = json!(id);
-            value["protocol"] = json!(1);
-            let mut bytes = serde_json::to_vec(&value).map_err(|_| E::ProtocolError)?;
-            drop(value);
-            bytes.push(b'\n');
-            if bytes.len() > 256 * 1024 {
-                return Err(E::StreamLimit);
-            }
-            let started = Instant::now();
-            let mut offset = 0;
-            let result = (|| {
-                while offset < bytes.len() {
-                    match self.input.write(&bytes[offset..]) {
-                        Ok(0) => return Err(E::ProcessFailed),
-                        Ok(n) => offset += n,
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            if started.elapsed() > Duration::from_secs(3) {
-                                return Err(E::Timeout);
-                            }
-                            std::thread::sleep(Duration::from_millis(5));
-                        }
-                        Err(_) => return Err(E::ProcessFailed),
-                    }
-                }
-                Ok(id)
-            })();
-            bytes.fill(0);
-            result
-        }
-        pub fn poll(&mut self) -> Result<Option<Value>, E> {
-            if self.closed {
-                return Err(E::ProcessFailed);
-            }
-            let mut buf = [0u8; 4096];
-            match self.error.read(&mut buf) {
-                Ok(n) => {
-                    self.stderr_bytes += n;
-                    if self.stderr_bytes > 64 * 1024 {
-                        return Err(E::StreamLimit);
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(_) => return Err(E::ProcessFailed),
-            }
-            if let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
-                if end + 1 > 128 * 1024 {
-                    return Err(E::StreamLimit);
-                }
-                let line: Vec<_> = self.pending.drain(..=end).collect();
-                let value: Value = serde_json::from_slice(&line).map_err(|_| E::ProtocolError)?;
-                if !value.is_object() || !value["type"].is_string() {
-                    return Err(E::ProtocolError);
-                }
-                return Ok(Some(value));
-            }
-            match self.output.read(&mut buf) {
-                Ok(0) => return Err(E::ProcessFailed),
-                Ok(n) => {
-                    self.pending.extend_from_slice(&buf[..n]);
-                    if self.pending.len() > 128 * 1024 + 4096 {
-                        return Err(E::StreamLimit);
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(_) => return Err(E::ProcessFailed),
-            };
-            Ok(None)
-        }
-        pub fn next(&mut self, timeout: Duration) -> Result<Value, E> {
-            let start = Instant::now();
-            loop {
-                if let Some(v) = self.poll()? {
-                    return Ok(v);
-                }
-                if start.elapsed() > timeout {
-                    return Err(E::Timeout);
-                }
-                std::thread::sleep(Duration::from_millis(5));
-            }
-        }
-        pub fn exchange(
-            &mut self,
-            value: &mut Value,
-            expected: &str,
-            timeout: Duration,
-        ) -> Result<Value, E> {
-            let id = self.send(value.take())?;
-            let start = Instant::now();
-            for _ in 0..64 {
-                let v = self.next(timeout.saturating_sub(start.elapsed()))?;
-                if v["request_id"] == id {
-                    if v["type"] == expected {
-                        return Ok(v);
-                    }
-                    if v["type"] == "request.error" {
-                        return Err(if expected == "auth.succeeded" {
-                            E::AuthenticationRequired
-                        } else {
-                            E::ProcessFailed
-                        });
-                    }
-                    return Err(E::ProtocolError);
-                }
-            }
-            Err(E::StreamLimit)
-        }
-        pub fn shutdown(&mut self) {
-            if self.closed {
-                return;
-            }
-            let _ = self.send(json!({"type":"bridge.shutdown"}));
-            let start = Instant::now();
-            while start.elapsed() < Duration::from_secs(8) {
-                if platform::exited(&mut self.child).unwrap_or(true) {
-                    break;
-                }
-                let _ = self.poll();
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            if !platform::exited(&mut self.child).unwrap_or(true) {
-                let _ = platform::signal_group(&self.child, false);
-                let start = Instant::now();
-                while start.elapsed() < Duration::from_secs(20) {
-                    if platform::exited(&mut self.child).unwrap_or(true) {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            }
-            if !platform::exited(&mut self.child).unwrap_or(true) {
-                let _ = platform::signal_group(&self.child, true);
-            }
-            let _ = self.child.wait();
-            self.closed = true;
-            self.authenticated = false;
-        }
-    }
-    impl Drop for Transport {
-        fn drop(&mut self) {
-            self.shutdown();
-        }
-    }
 }

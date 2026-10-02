@@ -1,7 +1,8 @@
 # JV Desktop 0.1.1
 
-A Linux desktop workspace for JV conversations: choose a project folder, set
-permissions, and follow commands, changed files and assistant replies in one window.
+A desktop workspace for JV conversations: choose a project folder and follow
+commands, changed files and assistant replies in one window. Published v0.1.1
+packages support Linux; native Windows integration is developed separately below.
 
 ## Requirements
 
@@ -64,7 +65,7 @@ Release packages are unsigned; SHA256 verifies file integrity, not a signing ide
 4. Check that JV CLI is detected. Older versions require an upgrade; there is no
    fallback that puts prompts into command-line arguments.
 5. Enter your username and password, leaving the service URL at your usual JV
-   endpoint. **Choose permissions before pressing Sign in**:
+   endpoint. On Linux, **choose permissions before pressing Sign in**:
    - **Read only**: tool network disabled.
    - **Workspace write**, Tool network checked: edits and tool networking allowed.
    - **Workspace write**, Tool network unchecked: edits allowed, tool network denied.
@@ -80,7 +81,7 @@ server/child errors are not displayed. Detection does not prove service health.
 
 ## Stop, privacy and state
 
-Execution follows the chosen workspace and CLI sandbox policy. Selecting a folder
+On Linux, execution follows the chosen workspace and CLI sandbox policy. Selecting a folder
 does not edit project files. Passwords are memory-only: no remember-password,
 frontend storage, password file, argv, environment or password logging.
 
@@ -107,9 +108,33 @@ CLI state as part of Desktop removal.
 ## Current limits
 
 Linux native bridge execution is supported and controlled end-to-end acceptance
-has passed. Windows Desktop compilation is checked in CI, but its native JV CLI
-backend is **not supported yet**. Bridge images, Desktop session resume, WSL,
+has passed. Windows has a native trusted-host backend on the development branch;
+it is not a published Windows release. Bridge images, Desktop session resume, WSL,
 integrated terminals and guaranteed remote cancellation are not included.
+
+## Windows dedicated worker PCs
+
+The Windows development build supports AMD64 Windows with WebView2 and the
+separately installed native JV CLI 0.4.9 or newer. It first checks
+`%LOCALAPPDATA%\Programs\JV CLI\jvcli.exe`, then safe absolute PATH locations.
+Desktop does not install, bundle or update JV CLI.
+
+Select **Native JV CLI** and explicitly choose a project folder. Windows displays
+**Trusted host**: full filesystem access, network enabled, and no tool approval
+prompts. Incompatible permission controls are unavailable. Model tools can access
+locations outside the project with the privileges of the account running Desktop.
+Use an ordinary dedicated Windows account; Administrator is not required and
+Windows Firewall should remain enabled. Offline demo remains independent.
+
+Desktop launches `jvcli.exe bridge --stdio --execution-mode trusted-host`.
+Passwords and messages travel over private stdin pipes. Desktop uses
+`%LOCALAPPDATA%\com.openjvspace.desktop\jvcli-state`, separate from terminal CLI
+state at `%LOCALAPPDATA%\JV\jv-cli`. Default app removal must preserve user data.
+
+Windows network-denied execution is not supported by the pinned restricted-token
+backend. Trusted host is intended only when unrestricted tool authority is
+deliberate. Production service acceptance, Windows release packaging and signing
+remain separate steps. See [Windows integration](docs/WINDOWS_PLAN.md).
 
 ## Development
 

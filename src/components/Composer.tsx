@@ -3,17 +3,21 @@ import type { Permissions } from '../types/events';
 
 interface Props {
   permissionLocked?: boolean;
+  trustedHost?: boolean;
   prompt: string; permissions: Permissions; busy: boolean; canSend: boolean;
   onPrompt: (text: string) => void; onPermissions: (value: Permissions) => void;
   onSend: () => void; onCancel: () => void;
 }
-export function Composer({ permissionLocked = false, prompt, permissions, busy, canSend, onPrompt, onPermissions, onSend, onCancel }: Props) {
+export function Composer({ permissionLocked = false, trustedHost = false, prompt, permissions, busy, canSend, onPrompt, onPermissions, onSend, onCancel }: Props) {
   const composing = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const wasBusy = useRef(false);
   useEffect(() => { if (wasBusy.current && !busy) input.current?.focus(); wasBusy.current = busy; }, [busy]);
   return <section className="composer" aria-label="Message composer">
-    <div className="permission-row">
+    {trustedHost ? <div className="permission-row" role="note" aria-label="Trusted host policy">
+      <strong>Trusted host</strong><span>Full filesystem access · Network enabled · No tool approval prompts</span>
+      <span className="permission-note">For dedicated worker PCs · Tools run with your Windows account's permissions</span>
+    </div> : <div className="permission-row">
       <label className="access-label">Access
         <select aria-label="Workspace permission" value={permissions.access} disabled={busy || permissionLocked}
           onChange={(e) => onPermissions({ access: e.target.value as Permissions['access'], network: e.target.value === 'read-only' ? false : permissions.network })}>
@@ -24,7 +28,7 @@ export function Composer({ permissionLocked = false, prompt, permissions, busy, 
         disabled={busy || permissionLocked || permissions.access === 'read-only'}
         onChange={(e) => onPermissions({ ...permissions, network: e.target.checked })} />Tool network</label>
       <span className="permission-note">{permissionLocked ? 'Session permissions fixed · reopen folder to change' : 'Tool network applies to tools, not sign-in'}</span>
-    </div>
+    </div>}
     <form onSubmit={(e) => { e.preventDefault(); if (canSend && !composing.current) onSend(); }}>
       <label className="sr-only" htmlFor="message">Message JV</label>
       <textarea ref={input} id="message" rows={3} value={prompt} disabled={busy}

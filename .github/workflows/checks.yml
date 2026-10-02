@@ -1,7 +1,7 @@
-name: Desktop foundation checks
+name: Desktop checks
 on:
   push:
-    branches: [main, feature/bridge-client]
+    branches: [main, feature/bridge-client, feature/windows-native]
   pull_request:
 permissions:
   contents: read
@@ -10,12 +10,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   shared:
+    name: Desktop native checks (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CARGO_HOME: ${{ github.workspace }}/.cache/cargo
       RUSTUP_HOME: ${{ github.workspace }}/.tools/rustup
@@ -33,6 +34,11 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
           rustup default 1.98.1
       - run: npm ci
+      - name: Linux Tauri development libraries (ephemeral runner only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm test
       - name: Offline release asset contracts
         if: runner.os == 'Linux'
@@ -47,8 +53,10 @@ jobs:
         run: |
           npm run browser:install
           npm run test:e2e
-      - name: Windows desktop compile check (backend intentionally unsupported)
+      - run: npm run tauri:check
+      - run: npm run tauri:test
+      - name: Native desktop executable build (no release/publication)
         if: runner.os == 'Windows'
-        run: npm run tauri:check
-      # Linux GUI compilation needs a separately provisioned GTK/WebKit runner.
-      # No JV credentials, native tasks, packaging, publishing, or release steps.
+        run: npm run tauri -- build --no-bundle
+      # Native lifecycle uses public offline fixtures only. No JV credentials,
+      # production jobs, CLI installation, tagging or publication is performed.

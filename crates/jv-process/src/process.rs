@@ -29,7 +29,7 @@ pub struct ProcessResult {
 }
 
 /// Blocking runner intended for a worker thread. Bounded pipes, no shell, no
-/// inherited secret environment. Only Linux process-tree semantics are enabled.
+/// inherited secret environment. Each supported platform owns its process tree.
 pub fn run_process(
     spec: ProcessSpec,
     cancel: Arc<AtomicBool>,
@@ -40,10 +40,165 @@ pub fn run_process(
     {
         linux::run(spec, cancel, timeout, on_frame)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::run(spec, cancel, timeout, on_frame)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         let _ = (spec, cancel, timeout, on_frame);
         Err(ErrorCategory::UnsupportedPlatform)
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::*;
+    use crate::platform::windows::{read, OwnedProcess};
+    use std::{io, sync::atomic::Ordering, time::Instant};
+
+    pub fn run(
+        spec: ProcessSpec,
+        cancel: Arc<AtomicBool>,
+        timeout: Duration,
+        mut emit: impl FnMut(Frame),
+    ) -> Result<ProcessResult, ErrorCategory> {
+        if !spec.program.is_absolute() || !spec.cwd.is_absolute() || !spec.cwd.is_dir() {
+            return Err(ErrorCategory::InvalidWorkspace);
+        }
+        if spec.stdin.len() > crate::MAX_PROMPT_BYTES {
+            return Err(ErrorCategory::InvalidPrompt);
+        }
+        if cancel.load(Ordering::Acquire) {
+            return Ok(ProcessResult {
+                exit_code: None,
+                cancelled: true,
+            });
+        }
+        let start = Instant::now();
+        let mut process =
+            OwnedProcess::spawn(&spec.program, &spec.args, &spec.cwd, None).map_err(|e| {
+                if e.kind() == io::ErrorKind::NotFound {
+                    ErrorCategory::Unavailable
+                } else {
+                    ErrorCategory::ProcessFailed
+                }
+            })?;
+        process
+            .write(spec.stdin, timeout.min(Duration::from_secs(3)))
+            .map_err(|e| {
+                if e.kind() == io::ErrorKind::TimedOut {
+                    ErrorCategory::Timeout
+                } else {
+                    ErrorCategory::ProcessFailed
+                }
+            })?;
+        process.input.take(); // EOF, including --version with no request.
+        let mut pending = Vec::new();
+        let (mut bytes, mut stderr_bytes, mut count, mut dropping) = (0, 0, 0, false);
+        let mut buffer = [0u8; 4096];
+        loop {
+            if cancel.load(Ordering::Acquire) {
+                return Ok(ProcessResult {
+                    exit_code: None,
+                    cancelled: true,
+                });
+            }
+            if start.elapsed() >= timeout {
+                return Err(ErrorCategory::Timeout);
+            }
+            let mut progressed = false;
+            for _ in 0..32 {
+                let mut error_progress = false;
+                match read(&mut process.error, &mut buffer) {
+                    Ok(n) => {
+                        error_progress = n > 0;
+                        stderr_bytes += n;
+                        progressed |= n > 0;
+                        if stderr_bytes > MAX_STREAM_BYTES {
+                            return Err(ErrorCategory::StreamLimit);
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(_) => return Err(ErrorCategory::ProcessFailed),
+                }
+                match read(&mut process.output, &mut buffer) {
+                    Ok(0) => {
+                        if !pending.is_empty() && !dropping {
+                            send(&pending, &mut count, &mut emit)?;
+                        }
+                        if !crate::platform::windows::wait(
+                            &process,
+                            timeout.saturating_sub(start.elapsed()),
+                        ) {
+                            return Err(ErrorCategory::Timeout);
+                        }
+                        let code = process
+                            .exit_code()
+                            .map_err(|_| ErrorCategory::ProcessFailed)?;
+                        return if code == 0 {
+                            Ok(ProcessResult {
+                                exit_code: Some(code),
+                                cancelled: false,
+                            })
+                        } else {
+                            Err(ErrorCategory::ProcessFailed)
+                        };
+                    }
+                    Ok(n) => {
+                        progressed = true;
+                        bytes += n;
+                        if bytes > MAX_STREAM_BYTES {
+                            return Err(ErrorCategory::StreamLimit);
+                        }
+                        for &b in &buffer[..n] {
+                            if b == b'\n' {
+                                if !dropping {
+                                    send(&pending, &mut count, &mut emit)?;
+                                }
+                                pending.clear();
+                                dropping = false;
+                            } else if !dropping {
+                                if pending.len() == MAX_LINE_BYTES {
+                                    emit(Frame::Diagnostic("oversized-event"));
+                                    pending.clear();
+                                    dropping = true;
+                                } else {
+                                    pending.push(b);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        if !error_progress {
+                            break;
+                        }
+                    }
+                    Err(_) => return Err(ErrorCategory::ProcessFailed),
+                }
+            }
+            if process.exited().map_err(|_| ErrorCategory::ProcessFailed)? && !progressed {
+                process.terminate(); // descendants holding inherited pipes cannot outlive their owner.
+            }
+            if !progressed {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    }
+    fn send(
+        line: &[u8],
+        count: &mut usize,
+        emit: &mut impl FnMut(Frame),
+    ) -> Result<(), ErrorCategory> {
+        *count += 1;
+        if *count > MAX_EVENTS {
+            return Err(ErrorCategory::StreamLimit);
+        }
+        emit(match std::str::from_utf8(line) {
+            Ok(s) => Frame::Line(s.trim_end_matches('\r').into()),
+            Err(_) => Frame::Diagnostic("invalid-utf8"),
+        });
+        Ok(())
     }
 }
 

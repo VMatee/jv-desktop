@@ -12,7 +12,7 @@ fn app() -> (
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.cache/tmp/native-ipc-workspace");
     std::fs::create_dir_all(&workspace).unwrap();
-    let workspace = workspace.canonicalize().unwrap();
+    let workspace = jv_desktop_process::canonical_path(&workspace).unwrap();
     let app = test::mock_builder()
         .manage(DesktopState {
             selected: Mutex::new(Some(workspace.clone())),
@@ -43,7 +43,13 @@ fn invoke(
             cmd: command.into(),
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
-            url: "tauri://localhost".parse().unwrap(),
+            url: if cfg!(target_os = "windows") {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
             body: InvokeBody::Json(body),
             headers: Default::default(),
             invoke_key: test::INVOKE_KEY.into(),
@@ -75,7 +81,13 @@ fn registered_native_turn_requires_authenticated_bridge_for_every_policy() {
         body["request"]["permissions"] = json!({"access": access, "network": network});
         assert_eq!(
             invoke(&window, "run_turn", body).err(),
-            Some(json!("authentication-required"))
+            Some(json!(
+                if cfg!(target_os = "windows") && (access != "workspace-write" || !network) {
+                    "permission-conflict"
+                } else {
+                    "authentication-required"
+                }
+            ))
         );
     }
     assert!(invoke(
@@ -114,7 +126,7 @@ fn unused_core_commands_are_not_authorized() {
 #[test]
 fn authentication_cannot_inject_a_child_environment() {
     let (_app, window, _) = app();
-    let mut body = json!({"request":{"username":"synthetic","baseUrl":"http://127.0.0.1:9","password":"TEST_PASSWORD_DO_NOT_LEAK","permissions":{"access":"read-only","network":false}}});
+    let mut body = json!({"request":{"username":"synthetic","baseUrl":"http://127.0.0.1:9","password":"TEST_PASSWORD_DO_NOT_LEAK","permissions":{"access":"workspace-write","network":true}}});
     assert_eq!(
         invoke(&window, "authenticate", body.clone()).err(),
         Some(json!("authentication-required"))
@@ -126,4 +138,47 @@ fn authentication_cannot_inject_a_child_environment() {
         .unwrap()
         .contains("unknown field `environment`"));
     assert!(!error.to_string().contains("TEST_PASSWORD_DO_NOT_LEAK"));
+}
+
+#[test]
+fn ipc_rejects_workspace_mismatch_and_unknown_permission_fields() {
+    let (_app, window, workspace) = app();
+    let other = workspace.parent().unwrap().join("other-ipc-workspace");
+    std::fs::create_dir_all(&other).unwrap();
+    let mut body = request(&other);
+    body["request"]["permissions"] = json!({"access":"workspace-write","network":true});
+    assert_eq!(
+        invoke(&window, "run_turn", body).err(),
+        Some(json!("invalid-workspace"))
+    );
+    let mut body = request(&workspace);
+    body["request"]["permissions"]["executionMode"] = json!("override");
+    assert!(invoke(&window, "run_turn", body)
+        .unwrap_err()
+        .as_str()
+        .unwrap()
+        .contains("unknown field"));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn ipc_rejects_conflicting_windows_policy_for_login_and_turn() {
+    let (_app, window, workspace) = app();
+    for (access, network) in [
+        ("read-only", false),
+        ("read-only", true),
+        ("workspace-write", false),
+    ] {
+        let permissions = json!({"access":access,"network":network});
+        let mut body = request(&workspace);
+        body["request"]["permissions"] = permissions.clone();
+        assert_eq!(
+            invoke(&window, "run_turn", body).err(),
+            Some(json!("permission-conflict"))
+        );
+        let body = json!({"request":{"username":"synthetic","baseUrl":"http://127.0.0.1:9","password":"TEST_PASSWORD_DO_NOT_LEAK","permissions":permissions}});
+        let error = invoke(&window, "authenticate", body).unwrap_err();
+        assert_eq!(error, json!("permission-conflict"));
+        assert!(!error.to_string().contains("TEST_PASSWORD"));
+    }
 }

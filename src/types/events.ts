@@ -20,6 +20,7 @@ export interface BackendStatus {
   availability: 'detected' | 'unavailable' | 'unsupported' | 'demo' | 'upgrade-required';
   canRun: boolean;
   detail: string;
+  executionMode?: 'sandboxed' | 'trusted-host' | 'unavailable';
 }
 export interface JvBackend {
   authenticate?(request: { username: string; baseUrl: string; password: string; permissions: Permissions }): Promise<void>;

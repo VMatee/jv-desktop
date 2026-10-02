@@ -30,7 +30,8 @@ shell startup files. Do not install a package or change display permissions.
 - [ ] Send a second harmless demo message and immediately click Stop. Events stop
   and a cancellation message appears; no project files change.
 - [ ] Read only disables tool networking. Workspace write enables the network
-  checkbox. Switching back to Read only clears/disables it. No bypass mode exists.
+  checkbox. Switching back to Read only clears/disables it. These Linux policies
+  remain unchanged; Windows Native JV CLI uses the fixed policy below.
 - [ ] Select **Native JV CLI**. The installed trusted CLI should be detected by
   its local `--version` check as 0.4.9 or newer. Select the disposable folder
   to start an unauthenticated bridge. The sign-in form appears; leave it empty.
@@ -43,7 +44,7 @@ The registered Rust IPC boundary is checked safely without a WebView or CLI:
 PATH="$PWD/.tools/node/bin:$PATH" npm run tauri:test
 ```
 
-All four tests must pass, including `authentication-required` for valid native
+All registered IPC tests must pass, including `authentication-required` for valid native
 requests. This does not claim a direct invocation from the production WebView;
 that remains a separate harness-level check. Do not enable production devtools,
 add permissions or authenticate to production to perform it.
@@ -52,3 +53,25 @@ Record date, OS/display session, executable version and pass/fail observations.
 Known automated native coverage is in [Validation](VALIDATION.md); do not mark
 untested cases passed. Package installation and real JV integration are outside
 this checklist.
+
+## Native Windows checklist
+
+Use an ordinary Windows account, the separately installed accepted native CLI,
+and an unsigned development Desktop build. Keep Windows Firewall enabled. Use
+only a disposable project under this checkout's `.cache/manual-gui` directory.
+No real Sign in or production turn is authorized by this checklist.
+
+- [ ] Launch `target\release\jv-desktop.exe`; the native window renders.
+- [ ] Offline demo still works, including Thai composition and Stop.
+- [ ] Open Folder invokes the real native dialog. Select the disposable local
+  drive folder with spaces/Thai in its name. Relative paths, drive root, home root,
+  app directory and reparse/UNC paths are rejected.
+- [ ] Native JV CLI detects the per-user executable and shows **Trusted host**,
+  full filesystem access, network enabled and no tool approvals. Read-only and
+  network-denied controls are unavailable. Leave the sign-in form empty.
+- [ ] Reopen the folder; the prior owned bridge exits and a fresh one starts.
+- [ ] Close the native window while the unauthenticated bridge is open. The
+  owned tree exits, an unrelated CLI/sentinel survives, and reopening works.
+
+Fixture WebView acceptance may exercise synthetic sign-in/turns separately, but
+its fixed folder does not substitute for this real native dialog/close checklist.

@@ -27,6 +27,7 @@
   },
   "bundle": {
     "active": true,
+    "useLocalToolsDir": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -38,6 +39,6 @@
     "homepage": "https://github.com/VMatee/jv-desktop",
     "category": "DeveloperTool",
     "shortDescription": "Desktop workspace for JV CLI",
-    "longDescription": "Chat with JV in a selected project workspace, with explicit permissions and structured activity. Requires separately installed JV CLI 0.4.9 or newer on Linux."
+    "longDescription": "Chat with JV in a selected project workspace, with structured activity. Requires separately installed JV CLI 0.4.9 or newer. Linux uses sandboxed permissions; Windows native integration uses trusted-host execution for dedicated worker PCs."
   }
 }

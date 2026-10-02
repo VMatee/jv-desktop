@@ -1,5 +1,106 @@
 # Validation record
 
+## Windows native integration — 2026-10-02
+
+Starting Desktop main: `86dab4b71c9bf222cfb7222aa3434bfa8db33aaf`, version 0.1.1.
+The accepted external CLI checkpoint is
+`4a00ee480db70d5bcac619d95afa64056cd1905c` (CLI 0.4.9, Codex 0.149.1,
+protocol 1). Its existing setup artifact was verified against SHA256
+`1e4a76fabffd76a10e33d06162e4d39688a4872193978f8b67f392bf905ab82d`
+and installed per-user without rebuilding/modifying the CLI repository.
+
+### Native implementation and evidence
+
+Windows 11 Pro build 26200, AMD64, ordinary non-Administrator account;
+PowerShell 5.1, repository-local Node 24.21.0/Rust 1.98.1, existing MSVC/SDK.
+The fixed per-user executable is resolved before safe absolute PATH entries.
+Drive-root cwd does not suppress that explicit install; cwd/project candidates
+and relative/reparse/UNC/device paths are rejected. Detection uses only local
+`--version`, not authentication or service health.
+
+Windows argv is exactly `bridge --stdio --execution-mode trusted-host`; Linux
+retains `bridge --stdio`. Structured capabilities lock Windows UI/IPC to network
+true and full access. Conflicting requests are rejected before execution, and
+session responses must match the platform's policy. Linux cannot accept a
+surprise danger-full-access session.
+
+Atomic CreateProcessW Job-list assignment precedes child code. Kill-on-close,
+restricted inherited handles, child/grandchild cleanup, nested Jobs, forced
+shutdown, owner death and unrelated sentinel survival are proven natively.
+Native PeekNamedPipe reads and a bounded stdin worker preserve framing/limits,
+write deadlines and cancellation; timed-out writers are cancelled and joined.
+Desktop state stays separate and CLI-owned: a loopback-only rejected synthetic
+login created protected private state without persisting its password. Ready/
+shutdown alone correctly creates no state. No terminal state was read.
+
+### Local checks
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | 104 packages, zero reported vulnerabilities |
+| `npm test` | 32 passed |
+| `npm run build` | passed |
+| `npm run rust:fmt`, `rust:check`, `rust:clippy` | passed |
+| `npm run rust:test` | 35 passed: 6 core, 8 bridge, 6 runner, 15 Windows native |
+| `npm run tauri:check` | passed |
+| `npm run tauri:test` | 6 registered IPC tests passed |
+| Tauri Clippy, normal and `offline-fixture` builds | passed, warnings denied |
+| `py -3.10 -B scripts/windows-native-smoke.py` | 3 real installed CLI tests passed |
+| `py -3.10 -B -m unittest discover -s tests -p 'test_release*.py' -v` | 7 offline release-asset tests passed |
+| Linux target process-core `cargo check --all-targets --features test-fixture --target x86_64-unknown-linux-gnu --locked` | passed; compile evidence, not Linux runtime acceptance |
+| Linux target process-core Clippy, all targets, warnings denied | passed; not Linux runtime acceptance |
+
+There are no ignored/security-relevant skipped tests in these gates. Test fixture
+binary targets have zero unit tests; their behavior is exercised by integration
+tests. All secrets/prompts were synthetic and stdin-only. No production JV
+authentication, credentials, jobs or inference were used.
+
+### Actual Windows application
+
+`npm run tauri -- build --bundles nsis` produced an actual optimized AMD64
+`target/release/jv-desktop.exe` and an unsigned development
+`target/release/bundle/nsis/JV Desktop_0.1.1_x64-setup.exe`. The real executable
+was launched, rendered bundled assets and detected the installed CLI. This is
+local build evidence, not installer installation/public release acceptance.
+
+`scripts/windows-webview-acceptance.mjs` attached to the actual Tauri WebView2
+using process-local loopback debugging. Normal build: **3 checks passed** (render,
+real native detection/fixed policy, cooperative IPC bridge close). Separate
+`offline-fixture` build: **10 checks passed** (render, demo Thai/Stop, native
+capabilities, Rust-selected folder, synthetic stdin sign-in/full-access session,
+Thai assistant/command/file events, second-turn Stop, folder reopen, bridge close).
+Frontend external requests were blocked and none were observed. Password storage
+was empty; raw stderr was not rendered. The fixture build cannot fall back to a
+real CLI. Screenshots/state remain ignored in `.cache/gui`.
+
+Native computer-use initialization and documented recovery failed because its
+native pipe is unavailable (OS error 2). WebView2 rejects JavaScript window.close.
+The native folder dialog and window-manager close button are therefore **not
+accepted yet**. The fixed fixture folder and forced test-process exit do not count
+as those native UI checks. Owned parent-death cleanup is independently proven by
+Rust and real-CLI tests.
+
+### Publication / CI / remaining work
+
+Baseline exact-SHA Desktop checks and Linux release checks were green. The new
+workflow runs Windows native fixture/IPC tests plus the actual executable build,
+and retains Linux process/frontend/browser/release regressions with Tauri tests.
+Final feature-SHA CI must be checked after publication; local results do not prove
+it. The initial cached HTTPS identity lacked write access and the GitHub write
+connector became administrator-disabled. At the operator's explicit request a
+dedicated deploy key was generated outside the checkout, protected for the current
+Windows user only. After the operator added its public key with write access,
+SSH authenticated specifically to `VMatee/jv-desktop`. Only this repository's
+remote/local SSH command changed; no global SSH configuration, private-key read,
+force push or sibling repository modification was used.
+
+Remaining acceptance: native folder/window-close controls and exact-SHA
+Windows/Linux CI after branch publication. Controlled live account acceptance, Windows
+release/signing/versioning and any CLI bundling decision are separate milestones.
+Pinned Windows restricted-token socket denial remains unsupported; dedicated
+workers intentionally use trusted host with normal account privileges and Firewall
+enabled. JV CLI stays separately installed and Desktop remains version 0.1.1.
+
 ## v0.1.1 release filename fix — 2026-10-01
 
 The reported v0.1.0 Linux release run36840098720 failed only at published-byte

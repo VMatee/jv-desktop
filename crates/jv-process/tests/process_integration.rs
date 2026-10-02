@@ -1,4 +1,7 @@
-#![cfg(all(target_os = "linux", feature = "test-fixture"))]
+#![cfg(all(
+    any(target_os = "linux", target_os = "windows"),
+    feature = "test-fixture"
+))]
 use jv_desktop_process::{
     exec_args,
     process::{detect, run_process, Frame, ProcessSpec},
@@ -67,7 +70,7 @@ fn argv_cwd_stdin_and_minimal_environment() {
     let mut s = spec("inspect");
     let cwd = s.cwd.join("../../.cache/tmp/work space;$(not-a-command)");
     std::fs::create_dir_all(&cwd).unwrap();
-    s.cwd = cwd.canonicalize().unwrap();
+    s.cwd = jv_desktop_process::canonical_path(&cwd).unwrap();
     let expected_cwd = s.cwd.clone();
     let mut frames = vec![];
     run_process(
@@ -88,13 +91,25 @@ fn argv_cwd_stdin_and_minimal_environment() {
         serde_json::json!(["exec", "--json", "--read-only", "--fixture", "inspect"])
     );
     let keys = value["env_keys"].as_array().unwrap();
-    assert!(keys.iter().all(|k| [
-        "LANG",
-        "PATH",
-        "PYTHONDONTWRITEBYTECODE",
-        "PYTHONNOUSERSITE"
-    ]
-    .contains(&k.as_str().unwrap())));
+    let allowed: &[&str] = if cfg!(target_os = "windows") {
+        &[
+            "PATH",
+            "SYSTEMROOT",
+            "WINDIR",
+            "USERPROFILE",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+        ]
+    } else {
+        &[
+            "LANG",
+            "PATH",
+            "PYTHONDONTWRITEBYTECODE",
+            "PYTHONNOUSERSITE",
+        ]
+    };
+    assert!(keys.iter().all(|k| allowed.contains(&k.as_str().unwrap())));
 }
 #[test]
 fn framing_discards_oversize_and_invalid_utf8_then_recovers() {
@@ -184,7 +199,23 @@ fn cancellation_stops_process_tree_and_reaps_leader() {
     assert!(start.elapsed() < Duration::from_secs(3));
     let pid = child_id.expect("fixture descendant");
     // The container's init may retain an orphan zombie. Z is not a running child.
+    #[cfg(target_os = "linux")]
     if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
         assert_eq!(stat.rsplit_once(") ").unwrap().1.chars().next(), Some('Z'));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, WAIT_OBJECT_0},
+            System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE},
+        };
+        // SAFETY: query a fixture PID; never terminate a caller-selected process.
+        let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid as u32) };
+        if !handle.is_null() {
+            assert_eq!(unsafe { WaitForSingleObject(handle, 1000) }, WAIT_OBJECT_0);
+            unsafe {
+                CloseHandle(handle);
+            }
+        }
     }
 }

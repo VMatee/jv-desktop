@@ -26,6 +26,8 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   const [password, setPassword] = useState('');
   const [prompt, setPrompt] = useState('');
   const [permissions, setPermissions] = useState<Permissions>({ access: 'read-only', network: false });
+  const trustedHost = mode === 'native' && status?.executionMode === 'trusted-host';
+  const activePermissions: Permissions = trustedHost ? { access: 'workspace-write', network: true } : permissions;
   const [messages, setMessages] = useState<Message[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [busy, setBusy] = useState(false);
@@ -71,7 +73,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   async function send() {
     if (!canSend || !workspace || active.current) return;
     const runId = crypto.randomUUID();
-    const request = { runId, workspace, prompt, permissions: { ...permissions } };
+    const request = { runId, workspace, prompt, permissions: { ...activePermissions } };
     try { validateRequest(request); } catch (failure) { setError(safeError(failure).message); return; }
     active.current = { id: runId, backend }; setBusy(true); setError(null); setOutcome('');
     setMessages((previous) => [...previous, { id: runId, role: 'user' as const, text: prompt }].slice(-100)); setPrompt('');
@@ -87,7 +89,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   async function login() {
     if (!workspace || !backend.authenticate || signingIn) return;
     setSigningIn(true); setError(null);
-    try { await backend.authenticate({ username, baseUrl, password, permissions }); setSignedIn(true); }
+    try { await backend.authenticate({ username, baseUrl, password, permissions: activePermissions }); setSignedIn(true); }
     catch (failure) { setError(safeError(failure).message); setSignedIn(false); }
     finally { setPassword(''); setSigningIn(false); }
   }
@@ -110,13 +112,13 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       <label>Service URL<input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} disabled={signingIn} /></label>
       <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={signingIn} autoComplete="new-password" /></label>
       <button className="primary" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in / starting session…' : 'Sign in'}</button>
-      <small>Sign-in contacts the selected service. Password is held in memory only. Choose permissions below first; signing in also starts your workspace session.</small>
+      <small>Sign-in contacts the selected service. Password is held in memory only. {trustedHost ? 'Signing in starts a trusted-host session on this dedicated worker.' : 'Choose permissions below first; signing in also starts your workspace session.'}</small>
     </form>}
     <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : signedIn ? 'Session ready' : 'Sign-in required'}</span></div>
       <Conversation messages={messages} busy={busy} demo={mode === 'demo'} />
       {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
-      <div className="turn-outcome" role="status">{outcome || (busy ? 'Turn running…' : signingIn ? 'Signing in and starting your workspace session…' : !workspace ? 'Choose a folder. Select Native JV CLI to connect, or try the offline demo.' : mode === 'native' ? signedIn ? 'Session ready. Send a task when you are ready.' : 'Choose permissions, then sign in to start a session.' : 'Offline demo ready. No account needed.')}</div>
-      <Composer permissionLocked={mode === 'native' && (signedIn || signingIn)} prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
+      <div className="turn-outcome" role="status">{outcome || (busy ? 'Turn running…' : signingIn ? 'Signing in and starting your workspace session…' : !workspace ? 'Choose a folder. Select Native JV CLI to connect, or try the offline demo.' : mode === 'native' ? signedIn ? 'Session ready. Send a task when you are ready.' : trustedHost ? 'Sign in to start a trusted-host session.' : 'Choose permissions, then sign in to start a session.' : 'Offline demo ready. No account needed.')}</div>
+      <Composer trustedHost={trustedHost} permissionLocked={mode === 'native' && (signedIn || signingIn)} prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
     </div><ActivityFeed activities={activities} busy={busy} /></main>
     <footer className="app-footer"><span>Local workspace · Explicit permissions</span><span>{mode === 'demo' ? 'No service calls. No file changes.' : 'Bridge protocol 1 · Passwords are not saved.'}</span></footer>
   </div>;

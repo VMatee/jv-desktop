@@ -38,7 +38,7 @@ fn main() {
     if scenario == "inspect" {
         // Synthetic prompts only in tests. This output is not a production log.
         emit(
-            json!({"args": args, "cwd": std::env::current_dir().unwrap(), "prompt": prompt,
+            json!({"args": args, "cwd": jv_desktop_process::canonical_path(&std::env::current_dir().unwrap()).unwrap(), "prompt": prompt,
             "env_keys": std::env::vars().map(|(k,_)| k).collect::<Vec<_>>() }),
         );
         return;

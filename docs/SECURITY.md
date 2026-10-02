@@ -6,8 +6,11 @@ An explicit Sign in action is required before any authentication/session request
 
 ## Process and workspace authority
 
-Only Rust selects the fixed `jvcli` executable from absolute PATH entries and
-invokes `bridge --stdio` with an argument vector and explicit validated cwd.
+Only Rust selects the fixed JV CLI executable and invokes it with native arguments
+and an explicit validated cwd. Linux uses `bridge --stdio`. Windows prefers the
+per-user `Programs\JV CLI\jvcli.exe`, then absolute PATH entries, and uses
+`bridge --stdio --execution-mode trusted-host`. Relative/current-directory and
+workspace executable lookup, reparse candidates and UNC/device paths are rejected.
 Frontend requests cannot select executable, environment, shell, PID or engine
 arguments. No shell interpolation, terminal scraping, PTY or argv prompt exists.
 The old exec gate remains closed and is not a fallback.
@@ -17,6 +20,30 @@ the executable directory. The CLI adds its own authoritative workspace checks.
 Selection creates no project files. Bridge state uses the application's own
 private data directory; terminal CLI accounts/sessions are not opened by Desktop.
 Installed executables are trusted native code, not sandboxed by version detection.
+
+### Windows trusted-host boundary
+
+Windows Native JV CLI intentionally gives model tools the normal permissions of
+the dedicated Windows account: full filesystem access, network enabled, approvals
+never. The UI shows a fixed trusted-host policy. Rust rejects manipulated read-only
+or network-denied requests before execution and validates full-access session
+responses only on Windows. Linux sandboxed policies are unchanged.
+
+Use an ordinary dedicated account. Do not run as Administrator or disable
+Windows Firewall/other host protections. This does not authorize credential
+leakage, arbitrary executable IPC or termination of unrelated processes. Pinned
+Codex 0.149.1 restricted-token Windows socket denial remains unsupported.
+
+Desktop owns an anonymous kill-on-close Job Object. The bridge joins it during
+native creation before code runs; only three stdio handles are inherited. Nested
+CLI/tool Jobs remain inside Desktop ownership. Closing/terminating Desktop's
+Job cleans its local descendants and never selects processes by name. Programs
+started by external services/brokers and remote work are outside this local
+process-tree guarantee.
+
+Windows `JVCLI_HOME` is the absolute `app_local_data_dir()/jvcli-state` child,
+distinct from terminal CLI state. Desktop rejects reparse ancestors and lets
+JV CLI create/protect its private state; it does not port chmod or copy ACL logic.
 
 ## Memory-only sign-in
 
@@ -63,6 +90,9 @@ Repositories and histories remain independent; never copy CLI source into Deskto
 No production calls, real credentials or live scenarios in ordinary tests. Tests
 use deterministic fake bridge/engine binaries and synthetic sentinel passwords.
 Frontend tests reject fetch/XHR; browser acceptance blocks non-loopback traffic.
-Final local fixture tests run in a Bubblewrap network namespace. The only actual
-installed CLI smoke sends ready/shutdown with no authentication. Live acceptance
-requires separate authorization. Build/runtime caches remain ignored in this repo.
+Historical Linux fixture tests ran in a Bubblewrap network namespace. Windows
+native tests use disposable state, native fixtures and local listeners only.
+The opt-in installed CLI smoke exercises readiness/shutdown and a loopback-only
+synthetic rejected login, with no real account/token/job. Actual Tauri WebView
+acceptance uses a separate opt-in fixture build for sign-in and turns. Live
+acceptance requires separate authorization. Build/runtime caches remain ignored.

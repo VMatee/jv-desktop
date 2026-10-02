@@ -1,5 +1,8 @@
-#[cfg(all(target_os = "linux", feature = "test-fixture"))]
-mod linux {
+#[cfg(all(
+    any(target_os = "linux", target_os = "windows"),
+    feature = "test-fixture"
+))]
+mod native {
     use jv_desktop_process::{
         bridge::{compatible, BridgeSupervisor},
         Access, ErrorCategory, Permissions,
@@ -22,7 +25,7 @@ mod linux {
             ))
             .join(name);
         std::fs::create_dir_all(&root).unwrap();
-        root.canonicalize().unwrap()
+        jv_desktop_process::canonical_path(&root).unwrap()
     }
     fn start(name: &str) -> Result<BridgeSupervisor, ErrorCategory> {
         let w = workspace(name);
@@ -34,8 +37,12 @@ mod linux {
     }
     fn permissions() -> Permissions {
         Permissions {
-            access: Access::ReadOnly,
-            network: false,
+            access: if cfg!(target_os = "windows") {
+                Access::WorkspaceWrite
+            } else {
+                Access::ReadOnly
+            },
+            network: cfg!(target_os = "windows"),
         }
     }
     fn login(b: &BridgeSupervisor) {
@@ -116,6 +123,23 @@ mod linux {
             }
             b.shutdown();
         }
+    }
+    #[test]
+    fn session_response_cannot_change_platform_execution_policy() {
+        let b = start("wrong-policy").unwrap();
+        assert_eq!(
+            b.authenticate(
+                "synthetic".into(),
+                "http://127.0.0.1:9".into(),
+                "TEST_PASSWORD_DO_NOT_LEAK".into(),
+                permissions(),
+            ),
+            Err(ErrorCategory::ProtocolError)
+        );
+        assert!(b
+            .run_turn("must not execute".into(), permissions(), |_| Ok(()))
+            .is_err());
+        b.shutdown();
     }
     #[test]
     fn broken_pipe_is_sanitized() {
@@ -204,7 +228,12 @@ fn shared_version_and_policy_contract() {
         (Access::WorkspaceWrite, true),
         (Access::WorkspaceWrite, false),
     ] {
-        let p = policy(Permissions { access, network }).unwrap();
+        let result = policy(Permissions { access, network });
+        if cfg!(target_os = "windows") && (access != Access::WorkspaceWrite || !network) {
+            assert!(result.is_err());
+            continue;
+        }
+        let p = result.unwrap();
         assert_eq!(p["read_only"], access == Access::ReadOnly);
         assert_eq!(p["allow_network"], network);
     }

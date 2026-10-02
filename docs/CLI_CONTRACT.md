@@ -5,10 +5,13 @@ The installed/source mismatch observed in Milestone2 (installed0.4.7/source0.4.8
 is superseded by the verified0.4.9 release and local upgrade. Older versions report
 Upgrade required; detection never falls back to `exec` positional prompts.
 
-Invocation is exactly `jvcli bridge --stdio`, with selected workspace as cwd and
+Linux invocation is exactly `jvcli bridge --stdio`. Windows invocation is
+`jvcli.exe bridge --stdio --execution-mode trusted-host`, with selected workspace as cwd and
 Desktop-owned `JVCLI_HOME`. Startup must return bridge.ready, protocol 1, compatible
 CLI version and matching workspace. Detection is local-only and proves neither
-authentication nor service health. Linux is the only current executable backend.
+authentication nor service health. Windows integration targets the independent
+accepted CLI checkpoint `4a00ee480db70d5bcac619d95afa64056cd1905c`
+(CLI 0.4.9, Codex 0.149.1). Desktop neither embeds nor updates that runtime.
 
 | Action | Bridge request |
 | --- | --- |
@@ -18,14 +21,27 @@ authentication nor service health. Linux is the only current executable backend.
 | Stop | turn.cancel, current Rust-owned turn_id |
 | Workspace/app close | bridge.shutdown |
 
-| Policy | read_only | allow_network |
+| Linux policy | read_only | allow_network |
 | --- | --- | --- |
 | Read only | true | false |
 | Workspace write + network | false | true |
 | Workspace write without tool network | false | false |
 
-Read-only plus network is rejected. No bypass mode exists. Tool network denial
+On Linux, read-only plus network is rejected. Tool network denial
 does not disable the JV service connection. The CLI owns sandbox/session rules.
+
+Windows Native JV CLI has one fixed trusted-host policy: `access=workspace-write`,
+`network=true` in Desktop IPC, with the explicit trusted-host process argument.
+This selects full filesystem access, network enabled and approvals never. Rust
+rejects read-only or network-false requests before authentication/execution; it
+does not silently reinterpret them. A session response must report
+`sandbox=danger-full-access` and `network=true` on Windows. Linux still requires
+the exact requested read-only/workspace-write sandbox and rejects full access.
+
+Pinned Codex 0.149.1 restricted-token mode does not enforce direct socket denial
+on Windows. This limitation is not fixed by Desktop. Dedicated worker machines
+deliberately use trusted host; users requiring untrusted network-denied execution
+must not use this profile.
 
 Passwords never enter argv, environment, config or session metadata. The bridge
 holds token ownership and performs logout; Desktop receives no token. Prompts
