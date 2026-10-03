@@ -10,13 +10,68 @@ use std::{
     time::Duration,
 };
 
+/// Windows support starts with the official 0.5.0 release; Linux keeps 0.4.9.
+pub const MINIMUM_CLI_VERSION: &str = if cfg!(target_os = "windows") {
+    "0.5.0"
+} else {
+    "0.4.9"
+};
+
 pub fn compatible(version: &str) -> bool {
+    compatible_since(version, MINIMUM_CLI_VERSION)
+}
+fn compatible_since(version: &str, minimum: &str) -> bool {
     let Some(v) = version.strip_prefix("JV CLI ") else {
         return false;
     };
-    let parts: Vec<_> = v.trim().split('.').map(str::parse::<u64>).collect();
-    matches!(parts.as_slice(), [Ok(a), Ok(b), Ok(c)] if (*a,*b,*c) >= (0,4,9))
+    parse_version(v.trim())
+        .zip(parse_version(minimum))
+        .is_some_and(|(found, floor)| found >= floor)
 }
+fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = version.split('.');
+    let value = (
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+    );
+    parts.next().is_none().then_some(value)
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn windows_release_floor_preserves_the_linux_baseline() {
+        for version in ["JV CLI 0.4.9", "JV CLI 0.4.10"] {
+            assert!(compatible_since(version, "0.4.9"));
+            assert!(!compatible_since(version, "0.5.0"));
+        }
+        for minimum in ["0.4.9", "0.5.0"] {
+            assert!(!compatible_since("JV CLI 0.4.8", minimum));
+            assert!(compatible_since("JV CLI 0.5.0", minimum));
+            assert!(compatible_since("JV CLI 1.0.0\r\n", minimum));
+        }
+    }
+
+    #[test]
+    fn neither_platform_accepts_malformed_or_prerelease_versions() {
+        for version in [
+            "JV CLI 0.5.0-beta",
+            "JV CLI 0.5.0evil",
+            "JV CLI 0.5.0.1",
+            "JV CLI 0.5",
+            "JV CLI 18446744073709551616.0.0",
+            "Codex 1.0.0",
+        ] {
+            for minimum in ["0.4.9", "0.5.0"] {
+                assert!(!compatible_since(version, minimum));
+            }
+        }
+    }
+}
+
 pub fn policy(p: Permissions) -> Result<Value, E> {
     if (p.access == Access::ReadOnly && p.network)
         || (cfg!(target_os = "windows") && (p.access != Access::WorkspaceWrite || !p.network))

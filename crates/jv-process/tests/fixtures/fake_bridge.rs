@@ -6,6 +6,12 @@ fn emit(v: Value) {
     io::stdout().flush().unwrap();
 }
 fn main() {
+    let current_version = jv_desktop_process::bridge::MINIMUM_CLI_VERSION;
+    let old_version = if cfg!(target_os = "windows") {
+        "0.4.9"
+    } else {
+        "0.4.8"
+    };
     let cwd = jv_desktop_process::canonical_path(&std::env::current_dir().unwrap()).unwrap();
     let scenario = cwd.file_name().unwrap().to_string_lossy();
     let args: Vec<_> = std::env::args().skip(1).collect();
@@ -37,7 +43,11 @@ fn main() {
     if args == ["--version"] {
         println!(
             "JV CLI {}",
-            if scenario == "old" { "0.4.8" } else { "0.4.9" }
+            if scenario == "old" {
+                old_version
+            } else {
+                current_version
+            }
         );
         return;
     }
@@ -89,12 +99,12 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
-    let mut ready = json!({"type":"bridge.ready","protocol":if scenario=="mismatch"{2}else{1},"cli_version":"0.4.9","workspace":cwd});
+    let mut ready = json!({"type":"bridge.ready","protocol":if scenario=="mismatch"{2}else{1},"cli_version":current_version,"workspace":cwd});
     if scenario == "wrong-workspace" {
         ready["workspace"] = json!("unselected");
     }
     if scenario == "ready-old" {
-        ready["cli_version"] = json!("0.4.8");
+        ready["cli_version"] = json!(old_version);
     }
     eprintln!("Synthetic trusted-host diagnostic; stderr is not protocol output");
     if scenario == "fragmented" {

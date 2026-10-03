@@ -4,9 +4,9 @@ import App from '../src/App';
 import { MockBackend } from '../src/lib/mock-backend';
 import type { DesktopEvent, JvBackend } from '../src/types/events';
 afterEach(cleanup);
-function native(status: 'detected' | 'upgrade-required' = 'detected'): JvBackend {
+function native(status: 'detected' | 'upgrade-required' | 'unavailable' = 'detected'): JvBackend {
   return {
-    detectBackend: async () => ({ availability: status, canRun: status === 'detected', executionMode: 'trusted-host', detail: 'Local fixture' }),
+    detectBackend: async () => ({ availability: status, canRun: status === 'detected', executionMode: 'trusted-host', minimumCliVersion: '0.5.0', detail: 'Local fixture' }),
     chooseWorkspace: async () => 'C:\\Projects\\ไทย', authenticate: vi.fn(async () => {}),
     runTurn: vi.fn(async (_request, emit) => { emit({ type: 'run-finished', outcome: 'completed' }); }), cancelTurn: vi.fn(), close: vi.fn(async () => {}),
   };
@@ -49,10 +49,29 @@ it('keeps Offline Demo permission controls independent of Windows native policy'
 it('does not submit when Windows requires a CLI upgrade', async () => {
   const backend = native('upgrade-required'); await open(backend);
   expect(await screen.findByText('JV CLI: upgrade-required')).toBeTruthy();
+  expect(screen.getByText(/Requires JV CLI 0.5.0\+ for Windows/)).toBeTruthy();
   expect(screen.queryByLabelText('Password')).toBeNull();
   fireEvent.change(screen.getByLabelText('Message JV'), { target: { value: 'test' } });
   expect((screen.getByRole('button', { name: /Send message/ }) as HTMLButtonElement).disabled).toBe(true);
   expect(backend.runTurn).not.toHaveBeenCalled();
+});
+it('directs Windows users to the official CLI release when it is missing', async () => {
+  const backend = native('unavailable'); await open(backend);
+  expect(await screen.findByText('JV CLI: unavailable')).toBeTruthy();
+  expect(screen.getByText(/Requires JV CLI 0.5.0\+ for Windows.*github.com\/VMatee\/jv-cli\/releases/)).toBeTruthy();
+  expect(screen.queryByLabelText('Password')).toBeNull();
+  expect((screen.getByRole('button', { name: /Send message/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(backend.runTurn).not.toHaveBeenCalled();
+});
+it('keeps Linux on its released 0.4.9 floor and editable sandbox permissions', async () => {
+  const backend = native('unavailable');
+  backend.detectBackend = async () => ({ availability: 'unavailable', canRun: false, executionMode: 'sandboxed', minimumCliVersion: '0.4.9', detail: 'Linux fixture' });
+  await open(backend);
+  expect(screen.getByText(/Requires JV CLI 0.4.9\+ for Linux/)).toBeTruthy();
+  expect(screen.queryByText(/Requires JV CLI 0.5.0/)).toBeNull();
+  expect(screen.getByLabelText('Workspace permission')).toBeTruthy();
+  expect(screen.getByLabelText('Tool network')).toBeTruthy();
+  expect(screen.queryByRole('note', { name: 'Trusted host policy' })).toBeNull();
 });
 it('sanitizes bridge failures and clears password references', async () => {
   const backend = native(); backend.authenticate = vi.fn(async (request) => { request.password = ''; throw new Error('PRIVATE_RAW_STDERR'); }); await open(backend);

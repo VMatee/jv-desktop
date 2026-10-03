@@ -125,3 +125,9 @@ the next instruction, then writes `{"stage":"ACTION"}` to the run's
 these control files. A disposable run directory can also be passed to reuse its
 test paths after a harness-only correction. Always close the previous test app
 first; this option does not select a workspace in the application.
+
+For `--installed --guided`, the operator clicks **Open Folder** and selects the
+named disposable folder. The driver observes the canonical selection instead of
+racing that manual click. Native close is armed immediately after process capture;
+the operator can click the real title-bar X as soon as instructed. Its normal exit
+is checked with owned-process handles, not rejected as an instruction-gate failure.

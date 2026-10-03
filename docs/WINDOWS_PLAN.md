@@ -12,8 +12,11 @@ React → JvBackend → Tauri IPC → Rust BridgeSupervisor
       → shared bridge protocol 1
 ```
 
-The external CLI must be 0.4.9 or newer; the accepted Windows dependency is CLI
-checkpoint `4a00ee480db70d5bcac619d95afa64056cd1905c`, with Codex 0.149.1.
+The external Windows CLI must be the official 0.5.0 release or newer, with
+Codex 0.149.1. Download its [Windows x86_64 installer](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0),
+install CLI first, then install Desktop, select Native JV CLI and a workspace,
+and sign in. No source checkout, Python, Node or separate Codex installation is needed.
+Linux's released 0.4.9 minimum remains unchanged.
 Desktop does not copy, rebuild, bundle, update or silently install JV CLI.
 Resolution prefers `%LOCALAPPDATA%\Programs\JV CLI\jvcli.exe`, then absolute
 PATH entries. It excludes current/project directories and reparse/UNC/device
@@ -81,7 +84,7 @@ for evidence and limits. No further real task is authorized by this record.
 
 ## Release packaging
 
-The unsigned `JV-Desktop_0.2.0_x64-setup.exe` uses Tauri NSIS current-user
+The unsigned `JV-Desktop_0.2.1_x64-setup.exe` uses Tauri NSIS current-user
 installation, normally `%LOCALAPPDATA%\JV Desktop`. No Administrator privileges
 are required for installation or runtime. The installer creates user shortcuts
 and uninstall registration; it does not add Desktop to PATH or install JV CLI.
@@ -94,7 +97,9 @@ are outside the installer inventory. Windows may show warnings for this unsigned
 installer. SHA-256 confirms bytes, not publisher identity.
 
 Release 0.2.0 is a minor version because it adds a supported platform, rather than
-a patch to 0.1.1. Both native package jobs build the same source/version; one job
+a patch to 0.1.1. Release 0.2.1 is a patch correcting the Windows dependency floor
+and installation guidance after official CLI publication; it adds no execution mode.
+Both native package jobs build the same source/version; one job
 combines verified inventories and publishes only after green main checks. See
 [Development](DEVELOPMENT.md#release-preparation) for the offline release gates.
 WSL, updates, terminal embedding, PTY/ConPTY and signing remain outside this release.

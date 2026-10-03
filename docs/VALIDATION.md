@@ -1,5 +1,58 @@
 # Validation record
 
+## Desktop 0.2.1 dependency patch — 2026-10-03
+
+Starting Desktop main: `153de47a93287c704e3b4849eb9a416976d4770a` (0.2.0).
+This patch requires official CLI **0.5.0+ on Windows**, retaining **0.4.9+ on
+Linux**, in both local detection and bridge.ready validation. BackendStatus
+provides a structured minimumCliVersion; unavailable/upgrade UI names the
+appropriate requirement and official download location. Execution policy,
+protocol 1 and the external-runtime architecture are unchanged.
+
+The [public JV CLI 0.5.0 release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0)
+was verified before Desktop work. All eight assets matched their public GitHub
+digests and strict release inventory. The public Windows setup was
+99,114,165 bytes, SHA256
+`5400e8abde06867e829bbc251fcae7f21772f6d43da4a3d24ccccf1a9ab09984`.
+Installed public CLI acceptance passed 17 tests, zero skips, six real IPv4/IPv6
+PowerShell/Python/Node connections, and installer/portable/rollback/state/PATH
+boundaries. Public CLI 0.5.0 with Codex 0.149.1 is installed at the normal per-user
+location; Desktop does not bundle, rebuild or install it.
+
+Desktop checks passed: `npm ci`, `npm test` (**34**), `npm run build`,
+`npm run rust:fmt`, `npm run rust:check`, `npm run rust:test` (**37**: 8 core,
+8 bridge, 6 runner, 15 Windows native), `npm run rust:clippy`,
+`npm run tauri:check`, `npm run tauri:test` (**6 IPC**), and release-asset contracts
+(**14**). Native real-public-CLI smoke passed **3** tests. No ignored/security
+skips or production requests were used. Tests explicitly reject Windows 0.4.9
+and preserve Linux's 0.4.9 acceptance and editable permission modes.
+
+The normal, non-fixture `npm run tauri -- build --bundles nsis` produced the
+0.2.1 executable and unsigned candidate setup (2,173,442 bytes, SHA256
+`30ca83ce8d22ad60dd9a6e958074f3ffb17cf7d2f0b8beb1d93ed6a55b9e60e8`).
+`scripts/windows-installer-smoke.py` passed **9 installer assertions** with zero
+skips, plus two ordinary-user installed WebView launches. Reinstall and normal
+uninstall preserved the synthetic separate-state canary and public CLI binary.
+The normal per-user installation was restored for native acceptance.
+
+Native manual-action acceptance with automated postconditions passed Offline
+Demo's Thai conversation and **5** real-public-CLI/native-control assertions:
+detected/trusted-host status, separate Desktop HOME, canonical Thai/space drive
+folder, Rust workspace/IPC validation, and real title-bar-X cleanup. Desktop,
+bridge and all captured descendants exited; no hidden owned process remained;
+the unrelated sentinel survived. Native automation remains unavailable (OS error
+2), so the operator performed Open Folder/selection and title-bar X. No login or
+coding task was sent. Two preliminary harness runs exposed instruction/click
+races, corrected only in the driver; their failure cleanup was not counted as
+native-close acceptance. The final native-only run independently passed all five
+postconditions. The separate Offline Demo success is retained as evidence.
+
+Version 0.2.1 is a patch for the official Windows dependency floor and guidance,
+not a new execution mode. The existing controlled live result below remains
+valid; no additional production acceptance was performed. Final feature/main/tag
+CI and public Desktop download/install checks are required before publication is
+reported complete. Runner-built installer bytes may differ from this candidate.
+
 ## Windows 0.2.0 release candidate — 2026-10-03
 
 Starting feature SHA: `5fcaa5d1b939bc464d0b396083b655bad8e34dce`, clean and

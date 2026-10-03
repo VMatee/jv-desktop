@@ -107,6 +107,7 @@ struct BackendStatus {
     can_run: bool,
     detail: String,
     execution_mode: &'static str,
+    minimum_cli_version: &'static str,
 }
 
 #[tauri::command]
@@ -118,6 +119,7 @@ async fn detect_backend() -> BackendStatus {
             can_run: false,
             detail: "Native JV CLI is unavailable on this platform. Use the offline demo.".into(),
             execution_mode: "unavailable",
+            minimum_cli_version: jv_desktop_process::bridge::MINIMUM_CLI_VERSION,
         }
     }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -130,10 +132,11 @@ async fn detect_backend() -> BackendStatus {
         match result {
             Ok(Ok(version)) => BackendStatus { availability: "detected", can_run: true,
                 execution_mode: execution_mode(),
+                minimum_cli_version: jv_desktop_process::bridge::MINIMUM_CLI_VERSION,
                 detail: format!("{version} · Bridge protocol 1. Sign in after selecting a workspace. Detection does not verify service health.") },
-            Ok(Err(ErrorCategory::UpgradeRequired)) => BackendStatus {availability:"upgrade-required",can_run:false,execution_mode:execution_mode(),detail:"Upgrade JV CLI to 0.4.9 or newer. No legacy execution fallback is available.".into()},
-            Ok(Err(ErrorCategory::Timeout)) => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),detail:"JV CLI version check timed out.".into()},
-            _ => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),detail:"Install the native JV CLI 0.4.9 or newer, then check again.".into()},
+            Ok(Err(ErrorCategory::UpgradeRequired)) => BackendStatus {availability:"upgrade-required",can_run:false,execution_mode:execution_mode(),minimum_cli_version:jv_desktop_process::bridge::MINIMUM_CLI_VERSION,detail:format!("Upgrade JV CLI to {} or newer for {}. No legacy execution fallback is available.",jv_desktop_process::bridge::MINIMUM_CLI_VERSION,if cfg!(target_os="windows") {"Windows"} else {"Linux"})},
+            Ok(Err(ErrorCategory::Timeout)) => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),minimum_cli_version:jv_desktop_process::bridge::MINIMUM_CLI_VERSION,detail:"JV CLI version check timed out.".into()},
+            _ => BackendStatus {availability:"unavailable",can_run:false,execution_mode:execution_mode(),minimum_cli_version:jv_desktop_process::bridge::MINIMUM_CLI_VERSION,detail:format!("Install JV CLI {} or newer for {}, then check again.",jv_desktop_process::bridge::MINIMUM_CLI_VERSION,if cfg!(target_os="windows") {"Windows"} else {"Linux"})},
         }
     }
 }

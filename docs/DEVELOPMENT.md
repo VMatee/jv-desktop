@@ -67,7 +67,8 @@ npm run tauri -- dev
 
 The native shell uses the real folder picker for both modes. Selecting a folder
 does not edit it. Native mode detects `jvcli --version` once when selected or on
-**Check again**, with a three-second timeout. CLI 0.4.9 or newer is required. Native folder selection starts a bridge without
+**Check again**, with a three-second timeout. CLI 0.5.0 or newer is required on
+Windows; Linux keeps 0.4.9 or newer. Native folder selection starts a bridge without
 authentication. Do not use Sign in during ordinary development: use Offline demo
 and fake bridge tests. Live acceptance requires separate authorization.
 
@@ -228,7 +229,8 @@ user-state deletion are included. Close the app before upgrading/removing it.
 
 ## Windows native acceptance (offline)
 
-The accepted external CLI remains separate. Ordinary tests never discover it.
+The official [Windows CLI 0.5.0 release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0)
+must be installed separately before opt-in native acceptance. Ordinary tests never discover it.
 To explicitly smoke-test the installed CLI through Desktop's Rust process layer:
 
 ```powershell

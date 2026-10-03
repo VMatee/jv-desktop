@@ -66,7 +66,10 @@ this is not a general secret detector for arbitrary text users ask to display.
 
 See [Architecture](ARCHITECTURE.md) for byte/count/deadline bounds. Malformed known
 frames, protocol mismatch, broken pipes and nonzero exits fail safely. Only bridge
-protocol 1 with CLI>=0.4.9 is accepted. No old CLI fallback exists.
+protocol 1 with CLI>=0.5.0 on Windows or CLI>=0.4.9 on Linux is accepted.
+Both local detection and bridge startup enforce that platform's released minimum.
+Install the official Windows CLI separately; Desktop does not download it.
+No old CLI fallback exists.
 
 Plain React text rendering escapes HTML. Changed paths are labels only and never
 opened, resolved or executed on receipt. No eval or raw-HTML rendering is used.

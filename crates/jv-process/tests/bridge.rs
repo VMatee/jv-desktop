@@ -57,7 +57,8 @@ mod native {
     #[test]
     fn version_and_ready() {
         assert!(!compatible("JV CLI 0.4.8"));
-        assert!(compatible("JV CLI 0.4.9"));
+        assert_eq!(compatible("JV CLI 0.4.9"), !cfg!(target_os = "windows"));
+        assert!(compatible("JV CLI 0.5.0"));
         assert!(compatible("JV CLI 1.0.0"));
         assert!(!compatible("JV CLI 0.4.9evil"));
         assert!(matches!(start("old"), Err(ErrorCategory::UpgradeRequired)));
@@ -213,8 +214,9 @@ fn shared_version_and_policy_contract() {
         bridge::{compatible, policy},
         Access, Permissions,
     };
-    assert!(compatible("JV CLI 0.4.9"));
-    assert!(compatible("JV CLI 0.4.10"));
+    assert_eq!(compatible("JV CLI 0.4.9"), !cfg!(target_os = "windows"));
+    assert_eq!(compatible("JV CLI 0.4.10"), !cfg!(target_os = "windows"));
+    assert!(compatible("JV CLI 0.5.0"));
     for v in ["JV CLI 0.4.8", "JV CLI 0.4.9-beta", "garbage"] {
         assert!(!compatible(v));
     }

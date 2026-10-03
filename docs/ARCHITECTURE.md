@@ -5,7 +5,7 @@ React chat / activity / memory-only sign-in
   → JvBackend interface + normalized DesktopEvent
     → Offline MockBackend OR TauriBackend commands/channels
       → Rust BridgeSupervisor
-        → installed JV CLI (Linux / Windows AMD64, CLI >= 0.4.9, protocol 1)
+        → installed JV CLI (Linux >= 0.4.9 / Windows AMD64 >= 0.5.0, protocol 1)
           → existing JV service (only after explicit user sign-in)
 ```
 

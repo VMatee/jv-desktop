@@ -21,6 +21,7 @@ export interface BackendStatus {
   canRun: boolean;
   detail: string;
   executionMode?: 'sandboxed' | 'trusted-host' | 'unavailable';
+  minimumCliVersion?: string;
 }
 export interface JvBackend {
   authenticate?(request: { username: string; baseUrl: string; password: string; permissions: Permissions }): Promise<void>;

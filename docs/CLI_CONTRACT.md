@@ -1,17 +1,19 @@
 # JV CLI compatibility baseline
 
-Desktop's native adapter targets **JV CLI 0.4.9 or newer with bridge protocol 1**.
-The installed/source mismatch observed in Milestone2 (installed0.4.7/source0.4.8)
-is superseded by the verified0.4.9 release and local upgrade. Older versions report
-Upgrade required; detection never falls back to `exec` positional prompts.
+Desktop's native adapter requires **bridge protocol 1** and platform-specific
+released CLI versions: **0.5.0 or newer on Windows**, **0.4.9 or newer on Linux**.
+The same floor is enforced by both version detection and bridge.ready validation.
+Older versions report Upgrade required; detection never falls back to `exec`
+positional prompts. BackendStatus exposes minimumCliVersion as structured data.
 
 Linux invocation is exactly `jvcli bridge --stdio`. Windows invocation is
 `jvcli.exe bridge --stdio --execution-mode trusted-host`, with selected workspace as cwd and
 Desktop-owned `JVCLI_HOME`. Startup must return bridge.ready, protocol 1, compatible
 CLI version and matching workspace. Detection is local-only and proves neither
-authentication nor service health. Windows integration targets the independent
-accepted CLI checkpoint `4a00ee480db70d5bcac619d95afa64056cd1905c`
-(CLI 0.4.9, Codex 0.149.1). Desktop neither embeds nor updates that runtime.
+authentication nor service health. Windows users install the independent
+[official JV CLI 0.5.0 Windows release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0)
+before Desktop. It retains Codex 0.149.1 and protocol 1. Desktop neither embeds
+nor updates that runtime; Linux users may keep their released 0.4.9 CLI.
 
 | Action | Bridge request |
 | --- | --- |

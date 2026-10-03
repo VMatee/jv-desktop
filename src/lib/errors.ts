@@ -1,8 +1,8 @@
 import type { ErrorCategory } from '../types/events';
 export const errorMessages: Record<ErrorCategory, string> = {
-  'upgrade-required': 'Upgrade JV CLI to version 0.4.9 or newer.',
+  'upgrade-required': 'Upgrade JV CLI to the version required for your platform, then check again.',
   'protocol-error': 'The local bridge returned invalid protocol data. Reopen the workspace to reconnect.',
-  unavailable: 'JV CLI was not found. Install the official Linux CLI and check again.',
+  unavailable: 'JV CLI was not found. Install the official CLI for your platform and check again.',
   'invalid-workspace': 'Choose an existing project folder, outside your home root or application folder.',
   'invalid-prompt': 'Enter a message no larger than 32 KiB.',
   'permission-conflict': 'Read only cannot be combined with tool networking.',

@@ -104,7 +104,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       <button className="secondary" onClick={() => void chooseWorkspace()} disabled={busy || choosing || signingIn}>{choosing ? 'Choosing…' : 'Open Folder'}<span aria-hidden="true">↗</span></button>
     </div>
     <div className="backend-banner"><span className="status-dot" /><strong>{checking ? 'Checking backend…' : mode === 'demo' ? 'Offline preview' : `JV CLI: ${status?.availability ?? 'unavailable'}`}</strong><span>{status?.detail}</span>
-      {mode === 'native' && !status?.canRun && <span>Requires JV CLI 0.4.9+. Install from github.com/VMatee/jv-cli/releases, then Check again.</span>}
+      {mode === 'native' && !status?.canRun && <span>Requires JV CLI {status?.minimumCliVersion ?? (trustedHost ? '0.5.0' : '0.4.9')}+ for {trustedHost ? 'Windows' : 'Linux'}. Install from github.com/VMatee/jv-cli/releases, then Check again.</span>}
       {mode === 'native' && <button className="text-button" onClick={() => void check()} disabled={checking || busy}>Check again</button>}
     </div>
     {mode === 'native' && workspace && status?.canRun && !signedIn && <form className="auth-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void login(); }}>

@@ -1,4 +1,4 @@
-# JV Desktop 0.2.0
+# JV Desktop 0.2.1
 
 A desktop workspace for JV conversations: choose a project folder and follow
 commands, changed files and assistant replies in one window. Supports Linux
@@ -6,8 +6,9 @@ x86_64 and native Windows 10/11 AMD64.
 
 ## Requirements
 
-- **[JV CLI 0.4.9 or newer](https://github.com/VMatee/jv-cli/releases)** installed
+- **[JV CLI](https://github.com/VMatee/jv-cli/releases)** installed
   separately using its official instructions. Desktop neither bundles nor updates it.
+  Windows requires **0.5.0 or newer**; Linux requires **0.4.9 or newer**.
 - A JV account for native conversations. Offline Demo needs no account.
 - **Linux:** a graphical desktop; built on Ubuntu 22.04. Debian/RPM packages need
   GTK3 and WebKitGTK4.1 as listed by your package manager. AppImage still requires
@@ -17,12 +18,14 @@ x86_64 and native Windows 10/11 AMD64.
 
 ## Install on Windows
 
-Download `JV-Desktop_0.2.0_x64-setup.exe` and `SHA256SUMS` from
-[Releases](https://github.com/VMatee/jv-desktop/releases/tag/v0.2.0).
+First install the official [JV CLI Windows x86_64 release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0).
+Its installer includes the CLI runtime; no separate Python, Node or Codex installation is required.
+Then download `JV-Desktop_0.2.1_x64-setup.exe` and `SHA256SUMS` from
+[Releases](https://github.com/VMatee/jv-desktop/releases/tag/v0.2.1).
 Check the installer hash against its entry in SHA256SUMS:
 
 ```powershell
-Get-FileHash .\JV-Desktop_0.2.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\JV-Desktop_0.2.1_x64-setup.exe -Algorithm SHA256
 ```
 
 Stop if verification fails. Run the installer and open **JV Desktop** from the
@@ -57,8 +60,8 @@ packages and BUILD-INFO.json. Choose one Linux format:
 **AppImage** — no system installation:
 
 ```sh
-chmod +x 'JV-Desktop_0.2.0_amd64.AppImage'
-./'JV-Desktop_0.2.0_amd64.AppImage'
+chmod +x 'JV-Desktop_0.2.1_amd64.AppImage'
+./'JV-Desktop_0.2.1_amd64.AppImage'
 ```
 
 If FUSE is unavailable, use `--appimage-extract-and-run`. Do not run Desktop as
@@ -67,13 +70,13 @@ root or disable OS protections to work around a launch problem.
 **Debian/Ubuntu** — open the DEB in your software installer, or use:
 
 ```sh
-sudo apt install './JV-Desktop_0.2.0_amd64.deb'
+sudo apt install './JV-Desktop_0.2.1_amd64.deb'
 ```
 
 **RPM-based Linux** — open the RPM in your software installer, or use:
 
 ```sh
-sudo dnf install './JV-Desktop-0.2.0-1.x86_64.rpm'
+sudo dnf install './JV-Desktop-0.2.1-1.x86_64.rpm'
 ```
 
 Launch **JV Desktop** from the applications menu, or run `jv-desktop`.
@@ -82,7 +85,8 @@ Release packages are unsigned.
 
 ## First run
 
-1. Install JV CLI and confirm `jvcli --version` reports 0.4.9 or newer.
+1. Install JV CLI and confirm `jvcli --version` reports 0.5.0 or newer on Windows,
+   or 0.4.9 or newer on Linux.
 2. Open JV Desktop. **Offline Demo** is the default and never contacts JV.
 3. Select **Native JV CLI**, then **Open Folder** and choose a dedicated project.
    Select the folder again if you switched from Demo.

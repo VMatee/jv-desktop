@@ -98,7 +98,9 @@ async function until(test, label, milliseconds = 600000) {
   throw new Error(`${label} timed out; native action was not accepted`);
 }
 async function manualStage(name, action, path) {
-  if (guided) {
+  // Native close may happen as soon as its instruction is shown. It is the
+  // expected action, so do not classify that clean exit as a failed gate wait.
+  if (guided && name !== 'close-window') {
     stage(`ready-${name}`, action, path);
     await until(() => {
       try { return JSON.parse(readFileSync(continueFile, 'utf8')).stage === name; } catch { return false; }
@@ -137,7 +139,9 @@ try {
     assert.equal(await page.getByLabel('Backend mode').inputValue(), 'demo');
     await page.getByText(`v${JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).version}`, {exact:true}).waitFor();
     await manualStage('select-demo', 'Select this disposable folder for Offline Demo in the real Windows folder dialog', workspace);
-    await page.getByRole('button', { name: /Open Folder/ }).click();
+    // Guided installed acceptance leaves the native dialog launch to the
+    // operator too, so a quick manual click/selection cannot race this click.
+    if (!guided) await page.getByRole('button', { name: /Open Folder/ }).click();
     await until(async () => await page.locator('.workspace-location p').textContent() === realpathSync(workspace), 'installed demo folder selection');
     await page.getByLabel('Message JV').fill('สวัสดี ไทย — release acceptance, offline only');
     await page.getByRole('button', {name:/Send message/}).click();
@@ -151,8 +155,9 @@ try {
   pass(installed ? 'installed application detects external JV CLI and displays fixed trusted-host policy' : 'normal release application renders; isolated fake CLI detected');
 
   await manualStage('select-primary', 'Select this disposable folder in the real Windows folder dialog', workspace);
-  await page.getByRole('button', { name: /Open Folder/ }).click();
-  await page.getByRole('button', { name: /Choosing/ }).waitFor();
+  if (!guided || !installed) {
+    await page.getByRole('button', { name: /Open Folder/ }).click();
+  }
   await until(async () => await page.locator('.workspace-location p').textContent() === realpathSync(workspace), 'native folder selection');
   await page.getByLabel('Password').waitFor();
   let first;

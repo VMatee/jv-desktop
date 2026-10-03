@@ -19,7 +19,7 @@ AGENTS.md when present. Local source is authoritative.
   CLI>=0.4.9. Never fall back to exec argv prompts or password environment variables.
   Keep tests synthetic/offline; production acceptance needs separate authorization.
 - Native Windows uses `jvcli.exe bridge --stdio --execution-mode trusted-host`
-  on dedicated ordinary-user worker PCs. Its fixed full-access/network-enabled
+  with official CLI>=0.5.0 on dedicated ordinary-user worker PCs. Its fixed full-access/network-enabled
   policy rejects read-only or network-denied requests. Never apply this policy
   to Linux, or copy JV CLI's implementation into Desktop.
 - Keep platform process behavior isolated. Windows requires native semantics;
