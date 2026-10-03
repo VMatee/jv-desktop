@@ -288,6 +288,7 @@ impl BridgeSupervisor {
                     | "files.changed"
                     | "tool.started"
                     | "assistant.message"
+                    | "turn.status"
                     | "turn.completed"
                     | "turn.failed"
                     | "turn.cancelled"
@@ -343,6 +344,31 @@ fn text(v: &Value, key: &str, max: usize) -> Result<String, E> {
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
         .collect())
 }
+// No provider mapping here: validate canonical public codes and reviewed prose.
+fn public_code(code: &str) -> bool {
+    if code.len() > 32 {
+        return false;
+    }
+    let Some(rest) = code.strip_prefix("JV-") else {
+        return false;
+    };
+    let parts: Vec<_> = rest.split('-').collect();
+    (2..=4).contains(&parts.len())
+        && parts[..parts.len() - 1]
+            .iter()
+            .all(|p| !p.is_empty() && p.len() <= 16 && p.bytes().all(|b| b.is_ascii_uppercase()))
+        && parts
+            .last()
+            .is_some_and(|p| p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit()))
+}
+fn public_message(message: &str) -> bool {
+    message.len() <= 256 && matches!(message,
+        "The AI service requires administrator authentication."
+        | "The service restarted after submission. The request was not sent again to prevent a duplicate."
+        | "Provider job failed."
+        | "Provider is temporarily unavailable.")
+}
+
 fn normalize(v: &Value) -> Result<Value, E> {
     let typ = v["type"].as_str().ok_or(E::ProtocolError)?;
     Ok(match typ {
@@ -372,7 +398,35 @@ fn normalize(v: &Value) -> Result<Value, E> {
             }
             json!({"type":typ,"local":true,"remote_state":"unknown"})
         }
-        "turn.failed" | "turn.completed" => json!({"type":typ}),
+        "turn.status" | "turn.failed" => {
+            if typ == "turn.status"
+                && (v["source"] != "remote"
+                    || !matches!(v["status"].as_str(), Some("waiting_for_auth" | "running")))
+            {
+                return Err(E::ProtocolError);
+            }
+            let mut result = json!({"type":typ});
+            if typ == "turn.status" {
+                result["source"] = json!("remote");
+                result["status"] = v["status"].clone();
+                if v["status"] == "running" {
+                    return Ok(result);
+                }
+            }
+            if v["source"] == "remote" {
+                if let Some(code) = v["support_code"].as_str().filter(|s| public_code(s)) {
+                    result["source"] = json!("remote");
+                    result["support_code"] = json!(code);
+                    if let Some(message) =
+                        v["public_message"].as_str().filter(|s| public_message(s))
+                    {
+                        result["public_message"] = json!(message);
+                    }
+                }
+            }
+            result
+        }
+        "turn.completed" => json!({"type":typ}),
         _ => return Err(E::ProtocolError),
     })
 }
@@ -406,4 +460,114 @@ impl Transport {
         Err(E::UnsupportedPlatform)
     }
     fn shutdown(&mut self) {}
+}
+
+#[cfg(test)]
+mod public_error_tests {
+    use super::*;
+
+    #[test]
+    fn status_is_nonterminal_and_sanitized() {
+        let waiting = normalize(
+            &json!({"type":"turn.status", "source":"remote", "status":"waiting_for_auth",
+            "support_code":"JV-SVC-103", "public_message":"SECRET"}),
+        )
+        .unwrap();
+        assert_eq!(
+            waiting,
+            json!({"type":"turn.status","source":"remote","status":"waiting_for_auth","support_code":"JV-SVC-103"})
+        );
+        let running = normalize(
+            &json!({"type":"turn.status", "source":"remote", "status":"running",
+            "support_code":"JV-SVC-103", "public_message":"SECRET"}),
+        )
+        .unwrap();
+        assert_eq!(
+            running,
+            json!({"type":"turn.status","source":"remote","status":"running"})
+        );
+        assert!(
+            normalize(&json!({"type":"turn.status","source":"remote","status":"failed"})).is_err()
+        );
+        assert!(normalize(
+            &json!({"type":"turn.status","source":"local","status":"waiting_for_auth"})
+        )
+        .is_err());
+        let malformed = normalize(
+            &json!({"type":"turn.status","source":"remote","status":"waiting_for_auth",
+            "support_code":"JV-SVC-103\n", "public_message":"x".repeat(257)}),
+        )
+        .unwrap();
+        assert!(malformed.get("support_code").is_none());
+        assert!(malformed.get("public_message").is_none());
+    }
+
+    #[test]
+    fn remote_failures_are_allowlisted() {
+        for code in [
+            "JV-SVC-103",
+            "JV-SVC-002",
+            "JV-TIMEOUT-001",
+            "JV-FUTURE-999",
+            "JV-AGENT-PROVIDER-CLEANUP-001",
+        ] {
+            let value = normalize(
+                &json!({"type":"turn.failed", "source":"remote", "support_code":code,
+                "public_message":"The AI service requires administrator authentication.",
+                "message":"SECRET selector token", "raw":{"password":"SECRET"}}),
+            )
+            .unwrap();
+            assert_eq!(value["support_code"], code);
+            assert_eq!(
+                value["public_message"],
+                "The AI service requires administrator authentication."
+            );
+            assert!(!value.to_string().contains("SECRET"));
+        }
+    }
+
+    #[test]
+    fn unsafe_fields_and_legacy_failures_are_downgraded() {
+        for code in [
+            "JV-SVC-103\n",
+            "engine_error",
+            "JV-secret-001",
+            "JV-SVC-001/secret",
+            "JV-AAAAAAAAAAAAAAAAA-001",
+            "JV-AAAAAAAAAAAAAAAA-BBBBBBBBBBBBBBBB-001",
+        ] {
+            assert_eq!(
+                normalize(
+                    &json!({"type":"turn.failed", "source":"remote", "support_code":code,
+                "public_message":"The AI service requires administrator authentication."})
+                )
+                .unwrap(),
+                json!({"type":"turn.failed"})
+            );
+        }
+        for message in [
+            "<html>SECRET</html>".to_owned(),
+            "x".repeat(257),
+            "token SECRET".to_owned(),
+        ] {
+            assert_eq!(
+                normalize(
+                    &json!({"type":"turn.failed", "source":"remote", "support_code":"JV-SVC-002",
+                "public_message":message})
+                )
+                .unwrap(),
+                json!({"type":"turn.failed","source":"remote","support_code":"JV-SVC-002"})
+            );
+        }
+        assert_eq!(
+            normalize(&json!({"type":"turn.failed","code":"engine_error","message":"SECRET"}))
+                .unwrap(),
+            json!({"type":"turn.failed"})
+        );
+        assert_eq!(
+            normalize(&json!({"type":"turn.failed","source":"local","support_code":"JV-SVC-103"}))
+                .unwrap(),
+            json!({"type":"turn.failed"})
+        );
+    }
 }

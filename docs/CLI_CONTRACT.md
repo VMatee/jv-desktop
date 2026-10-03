@@ -55,3 +55,58 @@ The protocol is documented in the independent CLI repository's
 not raw engine events. Cancellation is local-only; remote state remains unknown.
 Current Desktop does not expose bridge resume, new-thread or images. Controlled Linux acceptance passed using CLI 0.4.9. It is not repeated by
 release tests; any further live work needs separate authorization.
+
+
+## Optional remote support codes
+
+Protocol 1 `turn.failed` may additionally carry `source: remote`, `support_code`,
+and optional `public_message`. Legacy `code: engine_error` remains valid. Enhanced
+CLI builds preserve public job/response fields through a typed failure and a
+per-turn memory field; released older CLIs still produce generic failures.
+
+Rust and TypeScript independently require a full match of
+`JV-(?:[A-Z]{1,16}-){1,3}[0-9]{3}`, at most 32 ASCII characters. No provider mapping
+is maintained here. Unknown well-formed codes are displayed unchanged. Invalid
+codes or missing remote source fall back to the existing local/generic error.
+
+Public messages are at most 256 bytes and must exactly match one of:
+
+- `The AI service requires administrator authentication.`
+- `The service restarted after submission. The request was not sent again to prevent a duplicate.`
+- `Provider job failed.`
+- `Provider is temporarily unavailable.`
+
+All other prose and all additional JSON fields are dropped. A valid code survives
+an absent/rejected message. Extending this public text vocabulary requires review
+at the CLI, Rust, and TypeScript boundaries; it does not require mapping codes.
+
+Desktop represents these as `remote-failed`, source `remote`, with an optional
+code in the shared DesktopError/event model. The banner and activity history show
+selectable plaintext codes. Provider login failure does not clear the user's JV
+sign-in. Errors remain in memory only.
+
+## Nonterminal administrator attention
+
+Protocol 1 optionally emits `turn.status` with `source: remote`, a current
+`turn_id`, and `status: waiting_for_auth | running`. Rust requires the current
+turn correlation and these exact enum values, then applies the same support-field
+allowlist. TypeScript validates again. Waiting with missing/rejected public fields
+shows a generic waiting notice; running discards all support fields.
+
+`waiting_for_auth` displays “Waiting for administrator attention”, a selectable
+support code when available, and reviewed public text. The turn remains active:
+Send and workspace changes stay disabled, Stop remains available, and the user's
+JV sign-in is retained. Running clears the active notice; a later success displays
+the same turn's answer. Terminal failure, cancellation, local timeout, and process
+failure also clear the active notice. Activity history may retain the earlier
+waiting entry without treating it as the current status.
+
+The CLI continues polling the same remote job and does not resubmit/cancel it
+because it needs authentication. Existing local deadlines remain unchanged
+(including Desktop's one-hour turn deadline). Older CLIs simply omit status events.
+The opt-in structured Responses API currently hides this intermediate provider
+state as `in_progress`; no auth-specific notice can be inferred from that envelope.
+
+Native Windows acceptance of the remote support-code and authentication-wait
+feature remains a separate downstream gate. Linux automated validation does not
+constitute Windows acceptance; no live service validation is implied.

@@ -9,7 +9,7 @@ import { createBackends } from './lib/backends';
 import type { BackendMode } from './lib/backends';
 import { safeError } from './lib/errors';
 import { validateRequest } from './lib/requests';
-import type { BackendStatus, DesktopEvent, JvBackend, Permissions } from './types/events';
+import type { BackendStatus, DesktopError, DesktopEvent, JvBackend, Permissions } from './types/events';
 
 export default function App({ backends: supplied }: { backends?: Record<BackendMode, JvBackend> }) {
   const backends = useMemo(() => supplied ?? createBackends(), [supplied]);
@@ -31,8 +31,9 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   const [messages, setMessages] = useState<Message[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DesktopError | null>(null);
   const [outcome, setOutcome] = useState('');
+  const [remoteStatus, setRemoteStatus] = useState<Extract<DesktopEvent, { type: 'remote-status' }> | null>(null);
   const nextActivity = useRef(0);
   const active = useRef<{ id: string; backend: JvBackend } | null>(null);
   const mounted = useRef(true);
@@ -54,7 +55,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
     try { const selected = await backend.chooseWorkspace(); if (selected && mounted.current) {
       setSignedIn(false); setWorkspace(selected); if (selected !== workspace) { setMessages([]); setActivities([]); setOutcome(''); }
     } }
-    catch (failure) { if (mounted.current) { setSignedIn(false); setError(safeError(failure).message); } }
+    catch (failure) { if (mounted.current) { setSignedIn(false); setError(safeError(failure)); } }
     finally { if (mounted.current) setChoosing(false); }
   }
   function receive(runId: string, event: DesktopEvent) {
@@ -67,30 +68,32 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       const index = previous.findIndex((item) => item.id === id);
       return index < 0 ? [...previous, message].slice(-100) : previous.map((item) => item.id === id ? message : item);
     });
-    if (event.type === 'error') setError(event.message);
+    if (event.type === 'remote-status') setRemoteStatus(event.status === 'waiting_for_auth' ? event : null);
+    if (event.type === 'error' || event.type === 'run-finished') setRemoteStatus(null);
+    if (event.type === 'error') setError(event);
     if (event.type === 'run-finished') setOutcome(event.outcome === 'cancelled' ? (mode === 'demo' ? 'Turn stopped. No further demo events will arrive.' : 'Stopped locally. Remote job state is unknown; a submitted job may continue.') : event.outcome === 'completed' ? 'Turn complete' : 'Turn did not complete');
   }
   async function send() {
     if (!canSend || !workspace || active.current) return;
     const runId = crypto.randomUUID();
     const request = { runId, workspace, prompt, permissions: { ...activePermissions } };
-    try { validateRequest(request); } catch (failure) { setError(safeError(failure).message); return; }
-    active.current = { id: runId, backend }; setBusy(true); setError(null); setOutcome('');
+    try { validateRequest(request); } catch (failure) { setError(safeError(failure)); return; }
+    active.current = { id: runId, backend }; setBusy(true); setError(null); setRemoteStatus(null); setOutcome('');
     setMessages((previous) => [...previous, { id: runId, role: 'user' as const, text: prompt }].slice(-100)); setPrompt('');
     try { await backend.runTurn(request, (event) => receive(runId, event)); }
     catch (failure) { if (mode === 'native') setSignedIn(false); const safe = safeError(failure); receive(runId, { type: 'error', category: safe.category, message: safe.message }); }
-    finally { if (active.current?.id === runId) active.current = null; if (mounted.current) setBusy(false); }
+    finally { if (active.current?.id === runId) active.current = null; if (mounted.current) { setBusy(false); setRemoteStatus(null); } }
   }
   async function cancel() {
     const run = active.current; if (!run) return;
     try { await run.backend.cancelTurn(run.id); }
-    catch (failure) { if (mounted.current) setError(safeError(failure).message); }
+    catch (failure) { if (mounted.current) setError(safeError(failure)); }
   }
   async function login() {
     if (!workspace || !backend.authenticate || signingIn) return;
     setSigningIn(true); setError(null);
     try { await backend.authenticate({ username, baseUrl, password, permissions: activePermissions }); setSignedIn(true); }
-    catch (failure) { setError(safeError(failure).message); setSignedIn(false); }
+    catch (failure) { setError(safeError(failure)); setSignedIn(false); }
     finally { setPassword(''); setSigningIn(false); }
   }
   return <div className="app-shell">
@@ -116,7 +119,13 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
     </form>}
     <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : signedIn ? 'Session ready' : 'Sign-in required'}</span></div>
       <Conversation messages={messages} busy={busy} demo={mode === 'demo'} />
-      {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
+      {remoteStatus && <div className="error-banner" role="status" aria-label="Remote service status"><div>
+        <p>Waiting for administrator attention</p>
+        {remoteStatus.code && <p>Support code: <code className="support-code">{remoteStatus.code}</code></p>}
+        <p>{remoteStatus.message}</p>
+        <p>This turn remains active. Waiting for the same remote job to resume.</p>
+      </div></div>}
+      {error && <div className="error-banner" role="alert"><div>{error.code && <><p>JV could not complete this request.</p><p>Error code: <code className="support-code">{error.code}</code></p></>}{(!error.code || error.message !== 'JV could not complete this request.') && <p>{error.message}</p>}</div><button aria-label="Dismiss error" onClick={() => setError(null)}>×</button></div>}
       <div className="turn-outcome" role="status">{outcome || (busy ? 'Turn running…' : signingIn ? 'Signing in and starting your workspace session…' : !workspace ? 'Choose a folder. Select Native JV CLI to connect, or try the offline demo.' : mode === 'native' ? signedIn ? 'Session ready. Send a task when you are ready.' : trustedHost ? 'Sign in to start a trusted-host session.' : 'Choose permissions, then sign in to start a session.' : 'Offline demo ready. No account needed.')}</div>
       <Composer trustedHost={trustedHost} permissionLocked={mode === 'native' && (signedIn || signingIn)} prompt={prompt} permissions={permissions} busy={busy} canSend={canSend} onPrompt={setPrompt} onPermissions={setPermissions} onSend={() => void send()} onCancel={() => void cancel()} />
     </div><ActivityFeed activities={activities} busy={busy} /></main>

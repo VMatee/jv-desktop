@@ -203,6 +203,19 @@ fn main() {
                     std::process::exit(9);
                 }
                 emit(json!({"type":"turn.started","request_id":id,"turn_id":"turn_fixture"}));
+                if scenario == "auth-resume" || scenario == "auth-wait" {
+                    emit(
+                        json!({"type":"turn.status", "turn_id":"turn_fixture", "source":"remote",
+                        "status":"waiting_for_auth", "support_code":"JV-SVC-103",
+                        "public_message":"The AI service requires administrator authentication.", "private":"SECRET"}),
+                    );
+                    if scenario == "auth-wait" {
+                        continue;
+                    }
+                    emit(
+                        json!({"type":"turn.status", "turn_id":"turn_fixture", "source":"remote", "status":"running"}),
+                    );
+                }
                 if scenario == "slow"
                     || scenario == "tree"
                     || scenario == "hung-tree"

@@ -11,6 +11,7 @@ function label(event: DesktopEvent): string {
     case 'assistant-message': return 'Assistant response';
     case 'turn-completed': return 'Turn completed';
     case 'diagnostic': return event.reason === 'unknown-event' ? 'Unrecognized event ignored' : 'Invalid event skipped';
+    case 'remote-status': return event.status === 'waiting_for_auth' ? 'Waiting for administrator attention' : 'Remote job resumed';
     case 'error': return 'Turn error';
     case 'run-finished': return event.outcome === 'cancelled' ? 'Stopped by you' : event.outcome === 'completed' ? 'Process finished' : event.outcome === 'timeout' ? 'Process timed out' : 'Process failed';
   }
@@ -25,7 +26,7 @@ export function ActivityFeed({ activities, busy }: { activities: Activity[]; bus
           {(event.type === 'command-started' || event.type === 'command-completed') && <code>{event.command}</code>}
           {event.type === 'command-completed' && event.output && <details><summary>Output</summary><pre>{event.output}</pre></details>}
           {event.type === 'files-changed' && <ul className="file-list">{event.files.map((file, index) => <li key={index}><code>{file.path}</code><small>{file.kind}</small></li>)}</ul>}
-          {event.type === 'error' && <small>{event.message}</small>}
+          {(event.type === 'error' || event.type === 'remote-status') && <small>{event.code && <>{event.type === 'remote-status' ? 'Support code: ' : 'Error code: '}<code>{event.code}</code><br /></>}{event.message}</small>}
         </div></li>)}</ol>}
     <div className="activity-status"><span className={busy ? 'status-dot active' : 'status-dot'} />{busy ? 'Turn in progress' : 'Ready when you are'}</div>
   </aside>;

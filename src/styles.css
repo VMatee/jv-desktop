@@ -102,3 +102,7 @@ textarea::placeholder { color: #73806f; }
 .auth-form label { display:flex; flex:1; min-width:150px; flex-direction:column; gap:5px; font-size:12px; }
 .auth-form input { color:inherit; background:transparent; border:1px solid #555; border-radius:6px; padding:8px; }
 .auth-form small { flex-basis:100%; opacity:.75; }
+
+.support-code { user-select: all; overflow-wrap: anywhere; }
+.error-banner p { margin: 0 0 .5rem; }
+.error-banner p:last-child { margin-bottom: 0; }

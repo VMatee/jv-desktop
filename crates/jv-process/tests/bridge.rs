@@ -107,6 +107,58 @@ mod native {
         other.shutdown();
     }
     #[test]
+    fn auth_wait_resumes_and_completes_the_same_turn() {
+        let b = start("auth-resume").unwrap();
+        login(&b);
+        let mut events = vec![];
+        b.run_turn("synthetic".into(), permissions(), |v| {
+            events.push(v);
+            Ok(())
+        })
+        .unwrap();
+        let statuses: Vec<_> = events
+            .iter()
+            .filter(|e| e["type"] == "turn.status")
+            .collect();
+        assert_eq!(statuses.len(), 2);
+        assert_eq!(statuses[0]["status"], "waiting_for_auth");
+        assert_eq!(statuses[0]["support_code"], "JV-SVC-103");
+        assert_eq!(statuses[1]["status"], "running");
+        assert_eq!(events.last().unwrap()["type"], "turn.completed");
+        assert!(!serde_json::to_string(&events).unwrap().contains("SECRET"));
+        b.shutdown();
+    }
+    #[test]
+    fn auth_wait_stays_active_and_can_be_cancelled() {
+        let b = Arc::new(start("auth-wait").unwrap());
+        login(&b);
+        let worker = b.clone();
+        let (tx, rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            worker.run_turn("synthetic".into(), permissions(), |v| {
+                tx.send(v).unwrap();
+                Ok(())
+            })
+        });
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(3)).unwrap()["type"],
+            "turn.started"
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(3)).unwrap()["status"],
+            "waiting_for_auth"
+        );
+        assert!(!handle.is_finished());
+        b.cancel();
+        assert!(handle.join().unwrap().is_ok());
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(3)).unwrap()["type"],
+            "turn.cancelled"
+        );
+        b.shutdown();
+    }
+
+    #[test]
     fn failure_boundaries() {
         for scenario in ["nonzero", "malformed", "oversized", "failed"] {
             let b = start(scenario).unwrap();

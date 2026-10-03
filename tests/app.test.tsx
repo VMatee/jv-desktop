@@ -96,3 +96,108 @@ describe('memory-only bridge sign-in', () => {
     expect(await screen.findByText(/Remote job state is unknown/)).toBeTruthy();
   });
 });
+
+describe('public support code presentation', () => {
+  it.each(['JV-SVC-103', 'JV-SVC-002', 'JV-TIMEOUT-001', null])('renders %s through the event model', async (code) => {
+    const { parseBridgeEvent } = await import('../src/lib/bridge-events');
+    const backend: JvBackend = {
+      detectBackend: async () => ({ availability: 'detected', canRun: true, detail: 'Synthetic' }),
+      chooseWorkspace: async () => '/synthetic', cancelTurn: vi.fn(), authenticate: async () => {},
+      runTurn: async (_request, onEvent) => {
+        onEvent(parseBridgeEvent({ type: 'turn.failed', code: 'engine_error', source: 'remote', support_code: code,
+          public_message: code === 'JV-SVC-103' ? 'The AI service requires administrator authentication.' : '<html>SECRET selector</html>' })!);
+      },
+    };
+    render(<App backends={{ demo: backend, native: backend }} />);
+    fireEvent.change(screen.getByLabelText('Backend mode'), { target: { value: 'native' } });
+    await screen.findByText('JV CLI: detected');
+    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    await screen.findByText('/synthetic');
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'synthetic' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'FAKE_PASSWORD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull());
+    fireEvent.change(screen.getByLabelText('Message JV'), { target: { value: 'Synthetic test' } });
+    const send = screen.getByRole('button', { name: /Send message/ }) as HTMLButtonElement;
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
+    const alert = await screen.findByRole('alert');
+    if (code) {
+      expect(alert.textContent).toContain('Error code: ' + code);
+      expect(alert.querySelector('code')?.textContent).toBe(code);
+      if (code === 'JV-SVC-103') expect(alert.textContent).toContain('The AI service requires administrator authentication.');
+    } else {
+      expect(alert.textContent).toContain('JV could not complete the operation or the bridge exited.');
+      expect(alert.querySelector('code')).toBeNull();
+    }
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(document.body.textContent).not.toContain('SECRET');
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('administrator authentication wait lifecycle', () => {
+  it.each(['success', 'failure', 'cancel', 'timeout'])('keeps the turn active until %s', async (outcome) => {
+    const { act } = await import('@testing-library/react');
+    const { parseBridgeEvent } = await import('../src/lib/bridge-events');
+    let emit: (wire: unknown) => void = () => { throw new Error('No active turn'); };
+    let finish: () => void = () => {};
+    let fail: (e: unknown) => void = () => {};
+    const backend: JvBackend = {
+      detectBackend: async () => ({ availability:'detected', canRun:true, detail:'Synthetic' }),
+      chooseWorkspace: async () => '/synthetic', authenticate: async () => {},
+      runTurn: vi.fn(async (_request, onEvent) => new Promise<void>((resolve, reject) => {
+        finish = resolve; fail = reject;
+        emit = (wire) => onEvent(parseBridgeEvent(wire)!);
+        emit({ type:'turn.status', source:'remote', status:'waiting_for_auth', support_code:'JV-SVC-103',
+          public_message:'The AI service requires administrator authentication.' });
+      })),
+      cancelTurn: vi.fn(async () => { emit({type:'turn.cancelled',local:true,remote_state:'unknown'}); finish(); }),
+    };
+    render(<App backends={{ demo:backend, native:backend }} />);
+    fireEvent.change(screen.getByLabelText('Backend mode'), {target:{value:'native'}});
+    await screen.findByText('JV CLI: detected');
+    fireEvent.click(screen.getByRole('button', {name:/Open Folder/}));
+    fireEvent.change(await screen.findByLabelText('Username'), {target:{value:'synthetic'}});
+    fireEvent.change(screen.getByLabelText('Password'), {target:{value:'FAKE_PASSWORD'}});
+    fireEvent.click(screen.getByRole('button', {name:'Sign in'}));
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull());
+    fireEvent.change(screen.getByLabelText('Message JV'), {target:{value:'synthetic task'}});
+    fireEvent.click(screen.getByRole('button', {name:/Send message/}));
+    const waiting = await screen.findByRole('status', {name:'Remote service status'});
+    expect(waiting.textContent).toContain('Support code: JV-SVC-103');
+    expect(waiting.textContent).toContain('This turn remains active');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect((screen.getByLabelText('Message JV') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', {name:/Send message/})).toBeNull();
+    expect((screen.getByRole('button', {name:/Stop/}) as HTMLButtonElement).disabled).toBe(false);
+    if (outcome === 'success') {
+      await act(async () => emit({type:'turn.status',source:'remote',status:'running'}));
+      expect(screen.queryByRole('status', {name:'Remote service status'})).toBeNull();
+      expect(screen.getByRole('button', {name:/Stop/})).toBeTruthy();
+      await act(async () => { emit({type:'assistant.message',text:'Completed after refresh'}); emit({type:'turn.completed'}); finish(); });
+      expect(await screen.findByText('Turn complete')).toBeTruthy();
+      expect(screen.getByText('Completed after refresh')).toBeTruthy();
+    } else if (outcome === 'failure') {
+      await act(async () => { emit({type:'turn.failed',source:'remote',support_code:'JV-TIMEOUT-001'}); finish(); });
+      expect((await screen.findByRole('alert')).textContent).toContain('JV-TIMEOUT-001');
+      expect(screen.getByRole('alert').textContent).not.toContain('JV-SVC-103');
+    } else if (outcome === 'cancel') {
+      fireEvent.click(screen.getByRole('button', {name:/Stop/}));
+      expect(await screen.findByText(/Stopped locally. Remote job state is unknown/)).toBeTruthy();
+      expect(backend.cancelTurn).toHaveBeenCalledTimes(1);
+    } else {
+      await act(async () => fail('timeout'));
+      expect((await screen.findByRole('alert')).textContent).toContain('local process timed out');
+      expect(screen.getByRole('alert').textContent).not.toContain('JV-SVC-103');
+    }
+    await waitFor(() => expect(screen.queryByRole('button', {name:/Stop/})).toBeNull());
+    expect(screen.queryByRole('status', {name:'Remote service status'})).toBeNull();
+    expect(backend.runTurn).toHaveBeenCalledTimes(1);
+    expect(localStorage.length).toBe(0);
+  });
+});

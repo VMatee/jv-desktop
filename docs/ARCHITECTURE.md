@@ -97,7 +97,8 @@ or remote work have stopped. No unrelated CLI PID is selected or killed.
 | tool.started | tool activity |
 | assistant.message | plaintext assistant message |
 | turn.completed | ready/completed |
-| turn.failed | sanitized error |
+| turn.status | nonterminal administrator wait / resumed; retains active turn |
+| turn.failed | legacy local/generic error or validated remote support code |
 | turn.cancelled | stopped locally; remote state unknown |
 
 React does not consume raw engine JSON. The legacy JSONL parser remains for the
@@ -109,3 +110,20 @@ Rust independently rejects conflicts and requires danger-full-access/network-tru
 session responses. Linux rejects unexpected full-access responses and retains its
 existing permission model. Desktop does not impose Windows filesystem sandboxing.
 Images, resume, PTY/ConPTY, terminal embedding and WSL are deferred.
+
+
+Remote error flow: public server job/response fields → CLI typed remote failure
+and current-turn adapter state → optional protocol 1 failure fields → Rust field
+allowlist → TypeScript validation → shared DesktopError → banner/activity. Public
+messages use an exact reviewed vocabulary, not heuristic secret redaction. The
+code grammar and public text contract are in CLI_CONTRACT.md. Local BackendError
+and remote events use the same UI model; neither raw diagnostics nor provider
+exception mappings enter React.
+
+
+Authentication waiting is a status, not a failure. CLI job polling retains the
+remote job, and an optional coalesced `turn.status` crosses the same correlation
+and public-field validators. React tracks the current notice separately from
+terminal errors, using shared PublicSupport fields. Resumption or any terminal
+outcome clears the notice; only the backend turn promise ending releases busy
+state. Existing cancellation and deadline policies continue to apply.

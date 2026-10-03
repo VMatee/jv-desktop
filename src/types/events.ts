@@ -1,6 +1,12 @@
 export type DiagnosticReason = 'malformed-json' | 'invalid-event' | 'unknown-event' | 'oversized-event' | 'invalid-utf8';
 export type ErrorCategory = 'unavailable' | 'upgrade-required' | 'protocol-error' | 'invalid-workspace' | 'invalid-prompt' | 'permission-conflict'
-  | 'authentication-required' | 'unsupported-platform' | 'process-failed' | 'timeout' | 'stream-limit' | 'internal';
+  | 'remote-failed' | 'authentication-required' | 'unsupported-platform' | 'process-failed' | 'timeout' | 'stream-limit' | 'internal';
+export interface PublicSupport {
+  message: string;
+  source?: 'local' | 'remote';
+  code?: string;
+}
+export interface DesktopError extends PublicSupport { category: ErrorCategory }
 export type DesktopEvent =
   | { type: 'session-started'; sessionId: string }
   | { type: 'turn-started' }
@@ -10,7 +16,8 @@ export type DesktopEvent =
   | { type: 'files-changed'; files: { path: string; kind: string }[] }
   | { type: 'assistant-message'; id: string; text: string }
   | { type: 'turn-completed' }
-  | { type: 'error'; category: ErrorCategory; message: string }
+  | ({ type: 'remote-status'; status: 'waiting_for_auth' | 'running' } & PublicSupport)
+  | ({ type: 'error' } & DesktopError)
   | { type: 'diagnostic'; reason: DiagnosticReason }
   | { type: 'run-finished'; outcome: 'completed' | 'failed' | 'cancelled' | 'timeout' };
 
