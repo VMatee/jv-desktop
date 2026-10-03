@@ -28,7 +28,23 @@ for (const k of ['SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'PROGRAMFILES', 'PROGRAM
 env.PATH = packageSmoke ? `${process.env.SYSTEMROOT}\\System32` : `${process.env.LOCALAPPDATA}\\Programs\\JV CLI;${process.env.SYSTEMROOT}\\System32`;
 env.WEBVIEW2_USER_DATA_FOLDER = resolve(cache, 'webview');
 env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`;
-const child = spawn(helperPython || resolve(app), helperPython ? ['-B', resolve(root,'scripts/windows-standard-user-smoke.py'), '--app', resolve(app)] : [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });
+if (helperPython && process.env.GITHUB_ACTIONS === 'true') env.GITHUB_ACTIONS = 'true';
+const child = spawn(helperPython || resolve(app), helperPython ? ['-B', resolve(root,'scripts/windows-standard-user-smoke.py'), '--app', resolve(app)] : [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', helperPython ? 'pipe' : 'ignore', 'pipe'], shell: false });
+if (helperPython) {
+  // The helper captures raw app output privately and emits only token assertions
+  // and static error categories/codes. Never forward native app stderr.
+  let helperOutput = '';
+  child.stdout.on('data', bytes => {
+    helperOutput += bytes.toString('utf8');
+    if (helperOutput.length > 4096) { child.kill(); return; }
+    let newline;
+    while ((newline = helperOutput.indexOf('\n')) >= 0) {
+      const line = helperOutput.slice(0, newline).trim();
+      helperOutput = helperOutput.slice(newline + 1);
+      if (/^(?:PASS installed-app test uses ordinary Windows privileges|::(?:notice|error) title=(?:Windows test privileges|Installed-app privileges|Standard-user test process|Standard-user WebView test)::[A-Za-z0-9 :;,_x.-]+)$/.test(line)) console.log(line);
+    }
+  });
+}
 let stderrBytes = 0;
 child.stderr.on('data', (bytes) => { stderrBytes += bytes.length; if (stderrBytes > 65536) child.kill(); });
 let spawnError;

@@ -10,6 +10,7 @@ from ctypes import wintypes as W
 import os
 import msvcrt
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -242,8 +243,12 @@ def main():
         code = W.DWORD()
         require(K.GetExitCodeProcess(process.process, ctypes.byref(code)))
         if code.value:
-            known = [value for value in ('EACCES', 'EPERM', 'ENOENT', 'EINVAL', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'SyntaxError') if value in output.decode('utf-8', errors='replace')]
-            print(f'::error title=Standard-user test process::Child exit code: {code.value}; categories: {",".join(known) or "unknown"}', flush=True)
+            decoded = output.decode('utf-8', errors='replace')
+            known = [value for value in ('EACCES', 'EPERM', 'ENOENT', 'EINVAL', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'SyntaxError') if value in decoded]
+            if direct_app:
+                known += [category for marker, category in [('error while running tauri', 'TAURI_RUN_ERROR'), ('WebView', 'WEBVIEW'), ('Access is denied', 'ACCESS_DENIED')] if marker.lower() in decoded.lower()]
+            native_codes = sorted(set(re.findall(r'0x[0-9a-fA-F]{8}', decoded)))[:4]
+            print(f'::error title=Standard-user test process::Child exit code: {code.value}; categories: {",".join(known) or "unknown"}; native codes: {",".join(native_codes) or "none"}', flush=True)
         return code.value
     finally:
         if process.process and K.WaitForSingleObject(process.process, 0) != 0:
