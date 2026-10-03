@@ -28,7 +28,11 @@ env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --r
 const child = spawn(resolve(app), [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });
 let stderrBytes = 0;
 child.stderr.on('data', (bytes) => { stderrBytes += bytes.length; if (stderrBytes > 65536) child.kill(); });
-const exited = new Promise((resolveExit) => child.once('exit', resolveExit));
+let spawnError;
+const exited = new Promise((resolveExit) => {
+  child.once('exit', resolveExit);
+  child.once('error', error => { spawnError = error; resolveExit(); });
+});
 const results = [];
 let browser;
 let phase = 'WebView attachment';
@@ -38,6 +42,7 @@ try {
   // Bound the whole attachment phase and every individual connection attempt.
   const attachmentDeadline = Date.now() + 45000;
   while (Date.now() < attachmentDeadline) {
+    if (spawnError) throw spawnError;
     if (child.exitCode !== null) throw new Error('Native application exited before WebView attachment');
     try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: Math.min(1000, Math.max(1, attachmentDeadline - Date.now())) }); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
   }
@@ -115,11 +120,11 @@ try {
   // Static test phases/exit codes only: never publish child stderr, UI values,
   // environment values or an authentication transcript as CI annotations.
   if (process.env.GITHUB_ACTIONS === 'true') {
-    console.error(`::error title=Installed WebView acceptance::Phase: ${phase}; error: ${error.name}; application exit: ${child.exitCode}; stderr bytes: ${stderrBytes}`);
+    console.error(`::error title=Installed WebView acceptance::Phase: ${phase}; error: ${error.name}; code: ${error.code || 'none'}; application exit: ${child.exitCode}; stderr bytes: ${stderrBytes}`);
   }
   throw error;
 } finally {
   if (browser) await browser.close();
-  if (child.exitCode === null && child.signalCode === null) child.kill();
+  if (!spawnError && child.exitCode === null && child.signalCode === null) child.kill();
   await exited;
 }

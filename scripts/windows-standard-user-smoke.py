@@ -12,6 +12,7 @@ import msvcrt
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 if os.name != 'nt':
@@ -22,6 +23,10 @@ A = ctypes.WinDLL('advapi32', use_last_error=True)
 
 class SidAttributes(ctypes.Structure):
     _fields_ = [('sid', W.LPVOID), ('attributes', W.DWORD)]
+
+
+class SecurityAttributes(ctypes.Structure):
+    _fields_ = [('length', W.DWORD), ('descriptor', W.LPVOID), ('inherit', W.BOOL)]
 
 
 class Startup(ctypes.Structure):
@@ -59,6 +64,10 @@ K.LocalFree.argtypes = [W.LPVOID]
 K.GetStdHandle.argtypes = [W.DWORD]
 K.GetStdHandle.restype = W.HANDLE
 K.DuplicateHandle.argtypes = [W.HANDLE, W.HANDLE, W.HANDLE, ctypes.POINTER(W.HANDLE), W.DWORD, W.BOOL, W.DWORD]
+K.CreatePipe.argtypes = [ctypes.POINTER(W.HANDLE), ctypes.POINTER(W.HANDLE), ctypes.POINTER(SecurityAttributes), W.DWORD]
+K.SetHandleInformation.argtypes = [W.HANDLE, W.DWORD, W.DWORD]
+K.PeekNamedPipe.argtypes = [W.HANDLE, W.LPVOID, W.DWORD, W.LPVOID, ctypes.POINTER(W.DWORD), W.LPVOID]
+K.ReadFile.argtypes = [W.HANDLE, W.LPVOID, W.DWORD, ctypes.POINTER(W.DWORD), W.LPVOID]
 K.CreateJobObjectW.argtypes = [W.LPVOID, W.LPCWSTR]
 K.CreateJobObjectW.restype = W.HANDLE
 K.SetInformationJobObject.argtypes = [W.HANDLE, ctypes.c_int, W.LPVOID, W.DWORD]
@@ -147,6 +156,7 @@ def main():
     original, reduced, job, medium = W.HANDLE(), W.HANDLE(), W.HANDLE(), W.LPVOID()
     process = Process()
     standard_handles = []
+    read_pipe, write_pipe = W.HANDLE(), W.HANDLE()
     try:
         require(A.OpenProcessToken(K.GetCurrentProcess(), 0x8b, ctypes.byref(original)))
         elevated = elevation(original)
@@ -176,31 +186,61 @@ def main():
         startup.cb, startup.flags = ctypes.sizeof(startup), 0x100
         # Python's stdio handles need explicit inheritable duplicates when using
         # CreateProcessAsUser, rather than subprocess's own handle preparation.
-        for stream in (sys.stdin, sys.stdout, sys.stderr):
+        for stream in (sys.stdin,):
             handle = W.HANDLE()
             require(K.DuplicateHandle(K.GetCurrentProcess(), msvcrt.get_osfhandle(stream.fileno()),
                                       K.GetCurrentProcess(), ctypes.byref(handle), 0, True, 2))
             standard_handles.append(handle)
-        startup.stdin, startup.stdout, startup.stderr = standard_handles
+        attributes = SecurityAttributes(ctypes.sizeof(SecurityAttributes), None, True)
+        require(K.CreatePipe(ctypes.byref(read_pipe), ctypes.byref(write_pipe), ctypes.byref(attributes), 0))
+        require(K.SetHandleInformation(read_pipe, 1, 0))
+        startup.stdin = standard_handles[0]
+        startup.stdout = startup.stderr = write_pipe
         command = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
         require(A.CreateProcessAsUserW(reduced, str(node), command, None, None, True, 4,
                                       None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)))
         # Assignment happens while suspended: all test descendants belong to us.
         require(K.AssignProcessToJobObject(job, process.process))
+        K.CloseHandle(write_pipe)
+        write_pipe = W.HANDLE()
         if K.ResumeThread(process.thread) == 0xffffffff:
             raise ctypes.WinError(ctypes.get_last_error())
-        if K.WaitForSingleObject(process.process, 85000) != 0:
-            raise TimeoutError('Standard-user installed WebView test exceeded its deadline')
+        output = bytearray()
+        deadline = time.monotonic() + 85
+        while True:
+            available = W.DWORD()
+            if K.PeekNamedPipe(read_pipe, None, 0, None, ctypes.byref(available), None):
+                if available.value:
+                    buffer = ctypes.create_string_buffer(min(available.value, 65537))
+                    count = W.DWORD()
+                    require(K.ReadFile(read_pipe, buffer, len(buffer), ctypes.byref(count), None))
+                    output.extend(buffer.raw[:count.value])
+                    if len(output) > 65536:
+                        raise AssertionError('Standard-user test output exceeded 64 KiB')
+                    continue
+            elif ctypes.get_last_error() != 109:
+                raise ctypes.WinError(ctypes.get_last_error())
+            if K.WaitForSingleObject(process.process, 0) == 0:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Standard-user installed WebView test exceeded its deadline')
+            time.sleep(0.02)
+        for line in output.decode('utf-8', errors='replace').splitlines():
+            # This fixed offline command never signs in, starts a turn or prints
+            # child stderr. Forward only its own assertions/static annotations.
+            if line.startswith(('PASS ', '::error title=')):
+                print(line, flush=True)
         code = W.DWORD()
         require(K.GetExitCodeProcess(process.process, ctypes.byref(code)))
         if code.value:
-            print(f'::error title=Standard-user test process::Child exit code: {code.value}', flush=True)
+            known = [value for value in ('EACCES', 'EPERM', 'ENOENT', 'EINVAL', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'SyntaxError') if value in output.decode('utf-8', errors='replace')]
+            print(f'::error title=Standard-user test process::Child exit code: {code.value}; categories: {",".join(known) or "unknown"}', flush=True)
         return code.value
     finally:
         if process.process and K.WaitForSingleObject(process.process, 0) != 0:
             K.TerminateProcess(process.process, 1)
         if job: K.CloseHandle(job)
-        for handle in (*standard_handles, process.thread, process.process, reduced, original):
+        for handle in (read_pipe, write_pipe, *standard_handles, process.thread, process.process, reduced, original):
             if handle: K.CloseHandle(handle)
         if medium: K.LocalFree(medium)
 
