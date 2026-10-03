@@ -133,9 +133,12 @@ and builds the actual Desktop executable. Linux retains process-group tests,
 offline release-asset tests and browser acceptance, with Tauri libraries installed
 only on the ephemeral runner. Actions
 use pinned revisions, a read-only repository token with credential persistence
-disabled, and no JV credentials/deploy keys. The tag-only Linux release workflow requires successful main checks, builds on
-Ubuntu 22.04, and publishes packages/checksums using the scoped GitHub token.
-It does not install JV CLI or make JV service calls.
+disabled, and no JV credentials/deploy keys. The package workflow rehearses Linux
+and Windows builds on feature/main pushes. A matching tag requires green main
+checks and package rehearsal before its single publisher uploads both platforms
+and checksums using the scoped GitHub token. Linux builds on Ubuntu 22.04;
+Windows uses a native hosted runner. Neither installs JV CLI or makes JV service
+calls.
 
 ## Before publishing
 

@@ -32,12 +32,16 @@ let browser;
 let phase = 'WebView attachment';
 async function pass(name, action) { phase = name; await action(); results.push({ name, result: 'PASS' }); console.log(`PASS ${name}`); }
 try {
-  for (let n = 0; n < 100; n++) {
+  // A cold hosted Windows runner can take longer than a warm developer session.
+  // Bound the whole attachment phase and every individual connection attempt.
+  const attachmentDeadline = Date.now() + 45000;
+  while (Date.now() < attachmentDeadline) {
     if (child.exitCode !== null) throw new Error('Native application exited before WebView attachment');
-    try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
+    try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: Math.min(1000, Math.max(1, attachmentDeadline - Date.now())) }); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
   }
   if (!browser) throw new Error('Native WebView debug attachment timed out');
   const context = browser.contexts()[0];
+  phase = 'Tauri page startup';
   let page;
   for (let n = 0; n < 50; n++) { page = context.pages().find(p => /tauri\.localhost/.test(p.url())); if (page) break; await new Promise(r => setTimeout(r,100)); }
   if (!page) throw new Error('Tauri page unavailable');

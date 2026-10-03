@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import time
@@ -28,6 +29,21 @@ def registration():
             return winreg.QueryValueEx(key, 'DisplayVersion')[0]
     except FileNotFoundError:
         return None
+
+
+def webview_version():
+    """Read only Microsoft's documented public runtime version registry values."""
+    suffix = r'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+    for hive, prefix in [(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\WOW6432Node\\'),
+                         (winreg.HKEY_CURRENT_USER, 'SOFTWARE\\')]:
+        try:
+            with winreg.OpenKey(hive, prefix + suffix) as key:
+                value = winreg.QueryValueEx(key, 'pv')[0]
+                if isinstance(value, str) and re.fullmatch(r'[0-9]+(?:\.[0-9]+){3}', value) and value != '0.0.0.0':
+                    return value
+        except FileNotFoundError:
+            pass
+    return 'not detected'
 
 
 def main():
@@ -70,6 +86,8 @@ def main():
     for attempt in range(2):
         subprocess.run([str(installer), '/S', f'/D={install}'], env=env, check=True, timeout=180)
         check('install' if attempt == 0 else 'same-version reinstall', app.is_file() and uninstaller.is_file() and registration() == version)
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            print(f'::notice title=WebView2 prerequisite::Runtime version after install: {webview_version()}', flush=True)
         subprocess.run(['node', 'scripts/windows-webview-acceptance.mjs', str(app), '--package-smoke'], cwd=ROOT, check=True, timeout=90)
         check('installed WebView launch' if attempt == 0 else 'reinstalled WebView launch', True)
         check('separate state preserved' if attempt == 0 else 'reinstall state preserved', sha(canary) == expected_canary)
