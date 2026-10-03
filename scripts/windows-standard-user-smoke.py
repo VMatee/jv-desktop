@@ -122,8 +122,28 @@ def main():
     app = None if probe else Path(sys.argv[2]).resolve(strict=True)
     if node.name.lower() != 'node.exe' or (app is not None and app.name.lower() != 'jv-desktop.exe'):
         raise AssertionError('Only the fixed installed-app acceptance command is allowed')
-    argv = ([str(node), '-e', 'console.log("PASS standard-user launcher bootstrap")'] if probe else
-            [str(node), str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(app), '--package-smoke'])
+    # Catch early module/cache failures before the WebView driver's own try block.
+    # Emit only error categories, never paths, environment values or raw stderr.
+    failure = '''catch(error) {
+      const category = value => /^[A-Za-z0-9_]+$/.test(value || '') ? value : 'unknown';
+      console.error('::error title=Standard-user acceptance bootstrap::' +
+        category(error.name) + '; code: ' + category(error.code) + '; operation: ' + category(error.syscall));
+      process.exitCode = 1;
+    }'''
+    if probe:
+        code = '''import fs from 'node:fs'; import {randomUUID} from 'node:crypto';
+        import {join} from 'node:path'; try {
+          fs.readFileSync(process.argv[1]); fs.mkdirSync(process.argv[2], {recursive:true});
+          const file = join(process.argv[2], 'bootstrap-' + randomUUID());
+          fs.writeFileSync(file, 'synthetic launcher check', {flag:'wx'}); fs.unlinkSync(file);
+          console.log('PASS standard-user launcher bootstrap: source read/cache write');
+        } ''' + failure
+        argv = [str(node), '--input-type=module', '-e', code,
+                str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(ROOT / '.cache/gui')]
+    else:
+        code = "import {pathToFileURL} from 'node:url'; try { await import(pathToFileURL(process.argv[1]).href); } " + failure
+        argv = [str(node), '--input-type=module', '-e', code,
+                str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(app), '--package-smoke']
     original, reduced, job, medium = W.HANDLE(), W.HANDLE(), W.HANDLE(), W.LPVOID()
     process = Process()
     standard_handles = []
