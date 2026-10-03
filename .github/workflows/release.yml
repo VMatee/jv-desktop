@@ -1,6 +1,7 @@
-name: Linux release
+name: Desktop release packages
 on:
   push:
+    branches: [main, feature/windows-native]
     tags: ['v*.*.*']
 permissions:
   contents: read
@@ -9,16 +10,49 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - id: version
+        name: Require synchronized source version and release notes
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          node -e 'const fs=require("fs"),v=require("./package.json").version; if(require("./package-lock.json").version!==v || require("./src-tauri/tauri.conf.json").version!==v || !fs.readFileSync("Cargo.toml","utf8").includes("version = \""+v+"\""))process.exit(1)'
+          test -f "docs/releases/$version.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Tags require matching green main and no existing release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          test "$GITHUB_REF_NAME" = "v$RELEASE_VERSION"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+          mkdir -p .cache
+          for workflow in checks.yml release.yml; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&event=push" > .cache/checks.json
+            node -e 'const r=require("./.cache/checks.json").workflow_runs; if(!r.some(x=>x.head_branch==="main" && x.conclusion==="success"))process.exit(1)'
+          done
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > .cache/releases.json
+          node -e 'if(require("./.cache/releases.json").some(x=>x.tag_name===process.env.GITHUB_REF_NAME))process.exit(1)'
   linux:
+    needs: verify
     runs-on: ubuntu-22.04
     timeout-minutes: 45
-    permissions:
-      contents: write
-      actions: read
     env:
       CARGO_HOME: ${{ github.workspace }}/.cache/cargo
       RUSTUP_HOME: ${{ github.workspace }}/.tools/rustup
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      RELEASE_VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -27,20 +61,6 @@ jobs:
         with:
           node-version: '24.21.0'
           package-manager-cache: false
-      - name: Require matching version, green main checks, and no existing release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_NAME" = "v$version"
-          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
-          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?head_sha=$GITHUB_SHA&event=push" > checks.json
-          node -e 'const r=require("./checks.json").workflow_runs; if(!r.some(x=>x.head_branch==="main" && x.conclusion==="success")) process.exit(1)'
-          rm checks.json
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > releases.json
-          node -e 'if(require("./releases.json").some(x=>x.tag_name===process.env.GITHUB_REF_NAME)) process.exit(1)'
-          rm releases.json
       - name: Provision ephemeral Linux build runner
         run: |
           sudo apt-get update
@@ -48,33 +68,114 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
           rustup default 1.98.1
       - run: npm ci
-      - name: Offline release filename and checksum round-trip tests
-        run: python3 -B -m unittest discover -s tests -p 'test_release*.py' -v
+      - run: python3 -B -m unittest discover -s tests -p 'test_release*.py' -v
       - run: npm run tauri:check
       - run: npm run tauri:test
-      - name: Build production bundles from tagged source
+      - name: Build normal production Linux packages
         run: npm run tauri -- build --bundles deb,rpm,appimage
-      - name: Inspect and collect release assets
+      - name: Inspect and collect Linux assets
         run: |
           dpkg-deb --info "target/release/bundle/deb/JV Desktop_${RELEASE_VERSION}_amd64.deb"
           dpkg-deb --contents "target/release/bundle/deb/JV Desktop_${RELEASE_VERSION}_amd64.deb"
           rpm -qip "target/release/bundle/rpm/JV Desktop-${RELEASE_VERSION}-1.x86_64.rpm"
           rpm -qlp "target/release/bundle/rpm/JV Desktop-${RELEASE_VERSION}-1.x86_64.rpm"
           file target/release/jv-desktop "target/release/bundle/appimage/JV Desktop_${RELEASE_VERSION}_amd64.AppImage"
-          python3 scripts/release-assets.py
-          cd "target/release-assets/$RELEASE_VERSION"
-          sha256sum -c SHA256SUMS
-      - name: Require safe complete release inventory before publication
-        run: python3 -B scripts/release-assets.py --verify "target/release-assets/$RELEASE_VERSION"
-      - name: Publish without replacing existing releases or assets
-        env:
-          GH_TOKEN: ${{ github.token }}
+          python3 -B scripts/release-assets.py --platform linux
+          python3 -B scripts/release-assets.py --verify "target/release-assets/${RELEASE_VERSION}-linux" --platform linux
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-linux
+          path: target/release-assets/${{ env.RELEASE_VERSION }}-linux/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_HOME: ${{ github.workspace }}/.cache/cargo
+      RUSTUP_HOME: ${{ github.workspace }}/.tools/rustup
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Provision job-local Rust
         run: |
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.98.1
+      - run: npm ci
+      - run: python -B -m unittest discover -s tests -p 'test_release*.py' -v
+      - name: Build normal per-user unsigned NSIS installer
+        run: npm run tauri -- build --bundles nsis
+      - name: Installed package offline acceptance (no JV CLI/account needed)
+        run: python -B scripts/windows-installer-smoke.py "target/release/bundle/nsis/JV Desktop_${env:RELEASE_VERSION}_x64-setup.exe"
+      - name: Collect Windows asset
+        run: |
+          python -B scripts/release-assets.py --platform windows
+          python -B scripts/release-assets.py --verify "target/release-assets/${env:RELEASE_VERSION}-windows" --platform windows
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-windows
+          path: target/release-assets/${{ env.RELEASE_VERSION }}-windows/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  assemble:
+    needs: [verify, linux, windows]
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: target/native-assets
+      - name: Verify both native inventories and their source commit
+        run: |
+          python3 -B scripts/release-assets.py --combine target/native-assets/release-linux target/native-assets/release-windows
+          python3 -B scripts/release-assets.py --verify "target/release-assets/$RELEASE_VERSION"
+          (cd "target/release-assets/$RELEASE_VERSION" && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-complete
+          path: target/release-assets/${{ env.RELEASE_VERSION }}/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [verify, assemble]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-complete
+          path: target/release-assets/${{ env.RELEASE_VERSION }}
+      - name: Single publisher; never replace an existing release or assets
+        run: |
+          python3 -B scripts/release-assets.py --verify "target/release-assets/$RELEASE_VERSION"
           gh release create "$GITHUB_REF_NAME" "target/release-assets/$RELEASE_VERSION/"* --verify-tag --latest \
             --title "JV Desktop $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md"
-      - name: Verify published bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Verify two independent public downloads and API inventory
         run: |
           mkdir -p .cache
           for pass in 1 2; do
@@ -87,7 +188,9 @@ jobs:
           done
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets' > .cache/published-assets.json
           python3 - <<'PY'
-          import hashlib, json, os, pathlib
+          import json, os, pathlib, importlib.util
+          spec = importlib.util.spec_from_file_location('assets', 'scripts/release-assets.py')
+          mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
           source = pathlib.Path('target/release-assets') / os.environ['RELEASE_VERSION']
           assets = json.loads(pathlib.Path('.cache/published-assets.json').read_text())
           assert len(assets) == len(list(source.iterdir()))
@@ -95,8 +198,7 @@ jobs:
           for asset in assets:
               path = source / asset['name']
               assert asset['size'] == path.stat().st_size
-              expected = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
-              if asset.get('digest'):
-                  assert asset['digest'] == expected
-              print(asset['name'], asset['size'], expected, 'API digest verified' if asset.get('digest') else 'API digest unavailable')
+              expected = 'sha256:' + mod.digest(path)
+              if asset.get('digest'): assert asset['digest'] == expected
+              print(asset['name'], asset['size'], expected)
           PY

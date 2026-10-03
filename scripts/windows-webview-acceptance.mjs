@@ -10,6 +10,7 @@ import { root } from './tool-env.mjs';
 if (process.platform !== 'win32') throw new Error('Native Windows required');
 const app = process.argv[2];
 const fixture = process.argv.includes('--fixture');
+const packageSmoke = process.argv.includes('--package-smoke');
 if (!app || !resolve(app).toLowerCase().endsWith('.exe')) throw new Error('usage: node scripts/windows-webview-acceptance.mjs ABSOLUTE_APP.exe [--fixture]');
 const cache = resolve(root, '.cache/gui', fixture ? 'fixture-run' : 'real-run');
 mkdirSync(cache, { recursive: true });
@@ -46,6 +47,18 @@ try {
     return route.continue();
   });
   await pass('native window renders bundled UI', async () => { await page.getByRole('heading', {name: 'Conversation', exact: true}).waitFor(); assert.equal(await page.title(), 'JV Desktop'); });
+  if (packageSmoke) {
+    await pass('installed default Offline Demo and Native JV CLI choices render', async () => {
+      assert.equal(await page.getByLabel('Backend mode').inputValue(), 'demo');
+      await page.getByLabel('Backend mode').selectOption('native');
+      await page.getByRole('note', {name:'Trusted host policy'}).waitFor();
+      assert.equal(await page.getByLabel('Workspace permission').count(),0);
+      assert.equal(await page.getByLabel('Tool network').count(),0);
+    });
+    await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('close_bridge'));
+    assert.deepEqual(external, []);
+    writeFileSync(resolve(cache, 'package-smoke.json'), JSON.stringify({results, skips:0, productionCalls:0}, null,2));
+  } else {
   if (fixture) {
     await pass('offline demo folder and Thai conversation', async () => {
       await page.getByRole('button', { name: /Open Folder/ }).click();
@@ -89,6 +102,7 @@ try {
   await pass('cooperative IPC bridge shutdown', async () => { await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('close_bridge')); });
   assert.deepEqual(external,[],'Frontend attempted external network');
   writeFileSync(resolve(cache,'results.json'), JSON.stringify({ fixture, results, nativeDialog:'Not driven: native computer-use helper unavailable', windowClose:'Not accepted: script close did not exit Desktop; process terminated after cooperative bridge close', productionCalls:0 },null,2));
+  }
 } finally {
   if (browser) await browser.close();
   child.kill();

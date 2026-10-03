@@ -11,12 +11,19 @@ import { chromium } from '@playwright/test';
 import { root } from './tool-env.mjs';
 
 if (process.platform !== 'win32') throw new Error('Native Windows required');
-const app = resolve(root, 'target/release/jv-desktop.exe');
+const args = process.argv.slice(2);
+const installed = args.includes('--installed');
+if (installed) args.splice(args.indexOf('--installed'), 1);
+const nativeOnly = args.includes('--native-only');
+if (nativeOnly) args.splice(args.indexOf('--native-only'), 1);
+assert.ok(!nativeOnly || installed, '--native-only requires --installed; Offline Demo is a separate prior acceptance');
+const appOption = args.indexOf('--app');
+if (appOption >= 0) assert.ok(isAbsolute(args[appOption + 1]), '--app requires an absolute installed executable');
+const app = appOption >= 0 ? args.splice(appOption, 2)[1] : resolve(root, 'target/release/jv-desktop.exe');
 const fixture = resolve(root, 'target/debug/fake-bridge.exe');
 assert.ok(existsSync(app) && existsSync(fixture), 'Build the normal release app and test-fixture fake-bridge first');
 const base = resolve(root, '.cache/manual-gui');
 mkdirSync(base, { recursive: true });
-const args = process.argv.slice(2);
 const guided = args.includes('--guided');
 const reuse = args.find(arg => arg !== '--guided');
 const cache = reuse ? realpathSync(reuse) : mkdtempSync(resolve(base, 'run-'));
@@ -28,11 +35,14 @@ const otherWorkspace = resolve(cache, 'other workspace');
 const sentinelDir = resolve(cache, 'sentinel');
 const local = resolve(cache, 'local');
 const fakeInstall = resolve(local, 'Programs/JV CLI/jvcli.exe');
+const realCli = resolve(process.env.LOCALAPPDATA, 'Programs/JV CLI/jvcli.exe');
+const sentinelExecutable = installed ? resolve(cache, 'sentinel-cli.exe') : fakeInstall;
+if (installed) assert.ok(existsSync(realCli), 'The accepted external JV CLI must already be installed');
 for (const dir of [workspace, nextWorkspace, otherWorkspace, sentinelDir, resolve(local, 'Programs/JV CLI'), resolve(cache, 'tmp')]) mkdirSync(dir, { recursive: true });
 for (const dir of [workspace, nextWorkspace, sentinelDir]) for (const name of ['child.json', 'grandchild.json']) {
   try { unlinkSync(resolve(dir, name)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
-copyFileSync(fixture, fakeInstall);
+copyFileSync(fixture, sentinelExecutable);
 const stageFile = resolve(base, 'current.json');
 const continueFile = resolve(cache, 'continue.json');
 try { unlinkSync(continueFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -49,7 +59,7 @@ const env = {};
 for (const key of ['SYSTEMROOT', 'WINDIR', 'USERPROFILE']) if (process.env[key]) env[key] = process.env[key];
 env.LOCALAPPDATA = local; env.APPDATA = resolve(cache, 'roaming');
 env.TEMP = env.TMP = resolve(cache, 'tmp');
-env.PATH = `${env.SYSTEMROOT}\\System32`;
+env.PATH = installed ? `${resolve(realCli, '..')};${env.SYSTEMROOT}\\System32` : `${env.SYSTEMROOT}\\System32`;
 env.WEBVIEW2_USER_DATA_FOLDER = resolve(cache, 'webview');
 const port = await new Promise(resolvePort => {
   const server = createServer();
@@ -59,7 +69,7 @@ env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --r
 const child = spawn(app, [], { cwd: cache, env, stdio: ['ignore', 'ignore', 'pipe'], shell: false, windowsHide: false });
 let stderrBytes = 0;
 child.stderr.on('data', bytes => { stderrBytes += bytes.length; if (stderrBytes > 65536) child.kill(); });
-const watcher = spawn(resolve(process.env.SYSTEMROOT, 'py.exe'), ['-3.10', '-B', resolve(root, 'scripts/windows-gui-process-watch.py'), '--fixture', fakeInstall, '--sentinel-dir', sentinelDir], {
+const watcher = spawn(resolve(process.env.SYSTEMROOT, 'py.exe'), ['-3.10', '-B', resolve(root, 'scripts/windows-gui-process-watch.py'), '--fixture', sentinelExecutable, '--sentinel-dir', sentinelDir], {
   cwd: root, env: { ...env, PATH: `${env.SYSTEMROOT};${env.SYSTEMROOT}\\System32` }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false
 });
 watcher.stderr.on('data', bytes => { if (bytes.length) console.error('Native process watcher diagnostic (not displayed in Desktop)'); });
@@ -123,16 +133,43 @@ try {
     return route.continue();
   });
   await page.getByRole('heading', { name: 'Conversation', exact: true }).waitFor();
+  if (installed && !nativeOnly) {
+    assert.equal(await page.getByLabel('Backend mode').inputValue(), 'demo');
+    await page.getByText(`v${JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).version}`, {exact:true}).waitFor();
+    await manualStage('select-demo', 'Select this disposable folder for Offline Demo in the real Windows folder dialog', workspace);
+    await page.getByRole('button', { name: /Open Folder/ }).click();
+    await until(async () => await page.locator('.workspace-location p').textContent() === realpathSync(workspace), 'installed demo folder selection');
+    await page.getByLabel('Message JV').fill('สวัสดี ไทย — release acceptance, offline only');
+    await page.getByRole('button', {name:/Send message/}).click();
+    await page.getByText('Turn complete',{exact:true}).waitFor();
+    await page.getByText(/your offline preview is ready/).waitFor();
+    pass('installed frontend/version renders and Offline Demo completes a Thai conversation without service calls');
+  }
   await page.getByLabel('Backend mode').selectOption('native');
   await page.getByText('JV CLI: detected', { exact: true }).waitFor();
-  pass('normal release application renders; isolated fake CLI detected');
+  await page.getByRole('note', {name:'Trusted host policy'}).waitFor();
+  pass(installed ? 'installed application detects external JV CLI and displays fixed trusted-host policy' : 'normal release application renders; isolated fake CLI detected');
 
   await manualStage('select-primary', 'Select this disposable folder in the real Windows folder dialog', workspace);
   await page.getByRole('button', { name: /Open Folder/ }).click();
   await page.getByRole('button', { name: /Choosing/ }).waitFor();
   await until(async () => await page.locator('.workspace-location p').textContent() === realpathSync(workspace), 'native folder selection');
   await page.getByLabel('Password').waitFor();
-  const first = await tree(workspace, 'first');
+  let first;
+  if (installed) {
+    await until(async () => {
+      try { first = await query({type:'real-bridge', executable:realCli}); return true; }
+      catch { return false; }
+    }, 'installed bridge process identity', 10000);
+  } else { first = await tree(workspace, 'first'); }
+  if (installed) {
+    // Tauri uses Windows FOLDERID_LocalAppData, not the child's LOCALAPPDATA
+    // environment override. Readiness is unauthenticated and need not create
+    // state. Its separate absolute HOME is covered by the native Rust/CLI probe.
+    const desktopState = resolve(process.env.LOCALAPPDATA, 'com.openjvspace.desktop/jvcli-state');
+    assert.notEqual(desktopState.toLowerCase(), resolve(process.env.LOCALAPPDATA,'JV/jv-cli').toLowerCase());
+    pass('Desktop-specific state path is separate from terminal CLI state; native launch contract verified by installed-CLI smoke', {desktopState, stateContentsInspected:false});
+  }
   pass('native folder picker returns canonical space/Thai drive path; Rust opens its matching bridge', { workspace: realpathSync(workspace), ...first });
   const errors = await page.evaluate(async paths => {
     const answer = [];
@@ -147,6 +184,8 @@ try {
   assert.deepEqual(errors, ['invalid-workspace', 'invalid-workspace']);
   pass('registered Rust IPC rejects different/root workspaces; the matching bridge confirms the canonical selection');
 
+  let second = first;
+  if (!installed) {
   await manualStage('cancel-dialog', 'Click Cancel in the real Windows folder dialog; the selection and bridge must remain unchanged', workspace);
   await page.getByRole('button', { name: /Open Folder/ }).click();
   await page.getByRole('button', { name: /Choosing/ }).waitFor();
@@ -159,13 +198,14 @@ try {
   await page.getByRole('button', { name: /Open Folder/ }).click();
   await page.getByRole('button', { name: /Choosing/ }).waitFor();
   await until(async () => await page.locator('.workspace-location p').textContent() === realpathSync(nextWorkspace), 'native workspace change');
-  const second = await tree(nextWorkspace, 'second');
+  second = await tree(nextWorkspace, 'second');
   const replacement = await query({ type: 'changed', old: 'first', new: 'second' });
   pass('workspace change shuts down the previous bridge before starting the new bridge and cleans its owned tree', replacement);
+  }
   await query({ type: 'before-close' });
   await page.screenshot({ path: resolve(cache, 'before-native-close.png') });
   assert.deepEqual(external, [], 'Frontend attempted an external request');
-  await manualStage('close-window', 'Click the real title-bar X on JV Desktop. The fake bridge deliberately ignores cooperative shutdown', nextWorkspace);
+  await manualStage('close-window', installed ? 'Click the real title-bar X on the installed JV Desktop; no login or production task was sent' : 'Click the real title-bar X on JV Desktop. The fake bridge deliberately ignores cooperative shutdown', installed ? workspace : nextWorkspace);
   nativeClose = true;
   // Neither JavaScript close nor a forced termination is used for acceptance.
   await new Promise((resolveExit, reject) => {
@@ -177,9 +217,9 @@ try {
   const start = Date.now();
   const cleanup = await query({ type: 'closed' });
   const postExitVerificationMs = Date.now() - start;
-  pass('real native window close exits Desktop, bridge, child/grandchild and preserves the unrelated sentinel', { ...cleanup, postExitVerificationMs, ...second });
+  pass(installed ? 'installed native window close exits Desktop, real bridge and all captured descendants; unrelated sentinel survives' : 'real native window close exits Desktop, bridge, child/grandchild and preserves the unrelated sentinel', { ...cleanup, postExitVerificationMs, ...second });
   accepted = true;
-  const report = { acceptance: 'native manual-action acceptance + automated postconditions', results, skips: 0, productionCalls: 0, nativeClose: true };
+  const report = { acceptance: 'native manual-action acceptance + automated postconditions', app, installed, results, skips: 0, productionCalls: 0, nativeClose: true };
   writeFileSync(resolve(cache, 'results.json'), JSON.stringify(report, null, 2));
   stage('complete', 'Both native controls and all automated postconditions passed');
 } catch (error) {

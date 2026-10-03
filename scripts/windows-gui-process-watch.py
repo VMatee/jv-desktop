@@ -121,6 +121,27 @@ def main():
                              (("bridge", bridge), ("child", child), ("grandchild", grandchild))]
             assert all(w.alive() for w in groups[group]), "Fixture tree exited early"
             return {"bridge": bridge, "child": child, "grandchild": grandchild, "job": True}
+        if kind == "real-bridge":
+            expected = Path(command["executable"]).resolve()
+            graph = parents()
+            found = []
+            K.QueryFullProcessImageNameW.argtypes = [W.HANDLE, W.DWORD, W.LPWSTR, ctypes.POINTER(W.DWORD)]
+            K.QueryFullProcessImageNameW.restype = W.BOOL
+            for pid, parent in graph.items():
+                if parent != desktop_pid:
+                    continue
+                handle = Watch(pid)
+                try:
+                    name = ctypes.create_unicode_buffer(32768)
+                    size = W.DWORD(len(name))
+                    if K.QueryFullProcessImageNameW(handle.handle, 0, name, ctypes.byref(size)):
+                        if Path(name.value).resolve() == expected:
+                            found.append(pid)
+                finally:
+                    handle.close()
+            assert len(found) == 1, f"Expected one installed CLI bridge owned by Desktop; matched {len(found)}"
+            watch("real-bridge", found[0], True)
+            return {"bridge": found[0], "job": True, "installed_cli": True}
         if kind == "unchanged":
             assert all(w.alive() for w in groups[command["group"]]), "Dialog cancellation terminated the bridge"
             return {"bridge_unchanged": True}
@@ -152,7 +173,7 @@ def main():
             assert not smoke.descendants(desktop_pid), "A hidden owned Desktop descendant remains"
             assert watches["sentinel"].alive() and sentinel.poll() is None, "Unrelated sentinel was terminated"
             return {"desktop_exited": True, "bridge_exited": True,
-                    "child_exited": True, "grandchild_exited": True,
+                    "all_captured_descendants_exited": True,
                     "no_hidden_owned_process": True, "unrelated_survived": True}
         raise AssertionError("Unknown watcher request")
 

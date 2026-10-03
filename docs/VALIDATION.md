@@ -1,5 +1,54 @@
 # Validation record
 
+## Windows 0.2.0 release candidate — 2026-10-03
+
+Starting feature SHA: `5fcaa5d1b939bc464d0b396083b655bad8e34dce`, clean and
+equal to the fetched branch; main remained `86dab4b71c9bf222cfb7222aa3434bfa8db33aaf`.
+Version 0.2.0 is a minor release for the new supported Windows platform. CLI 0.4.9,
+Codex 0.149.1 and bridge protocol 1 are unchanged. No additional production login,
+coding task or credential inspection was performed.
+
+`npm ci`, `npm test` (32), `npm run build`, `npm run rust:fmt`, `npm run rust:check`,
+`npm run rust:test` (35: 6 core, 8 bridge, 6 runner, 15 native Windows),
+`npm run rust:clippy`, `npm run tauri:check` and `npm run tauri:test` (6 IPC) passed.
+All tests ran with zero ignored/security skips. Offline release contracts passed
+14 tests, including mixed-commit rejection and four-package download verification.
+The opt-in real installed CLI smoke passed 3 tests without production requests.
+Both workflows passed checksum-verified actionlint 1.7.7 validation.
+
+`npm run tauri -- build --bundles nsis` built the normal, non-fixture release app
+and current-user NSIS installer. Local candidate installer: 2,173,116 bytes,
+SHA256 `cd28c8d13164466cbd019d820f1a77c97dc0b7a00609c9dc21526eaffbbda51f`,
+unsigned. Runner release builds may have different bytes; public checksums must
+identify the exact published runner artifacts.
+
+| Installed candidate check | Result |
+| --- | --- |
+| Per-user install / same-version reinstall / uninstall | **PASS**, 9 automated installer assertions, zero skips. |
+| State preservation | **PASS**, a synthetic canary in Desktop's actual application-data directory survived reinstall and normal uninstall. Only that test-created canary was removed afterward. Private CLI state was not inspected. |
+| Installed frontend / Offline Demo | **PASS**, actual installed `jv-desktop.exe` rendered 0.2.0 and completed a Thai simulated conversation, with no service calls. |
+| Real installed CLI / trusted host | **PASS**, detected separately installed 0.4.9, fixed full-access/network-enabled policy shown, unauthenticated protocol-1 bridge opened. |
+| Real native folder selection | **PASS**, canonical local drive path with spaces/Thai matched the selected Rust workspace; different/root IPC workspaces were rejected. |
+| Native title-bar X / owned cleanup | **PASS**, Desktop exit code 0, real CLI bridge and all captured descendants exited, no hidden owned descendant remained; unrelated sentinel survived. |
+| External boundaries | **PASS**, JV CLI binary hash/version unchanged; disposable workspace stayed empty. Installer inventory excludes JV CLI, terminal state and project files. |
+| Final local reinstall / launch | **PASS**, normal `%LOCALAPPDATA%\JV Desktop` installation restored and 3 installed WebView/readiness/shutdown checks passed. |
+
+Native automation recovery failed with OS error 2. Folder selection and native X
+were **manual actions with automated state/process postconditions**; they were not
+JavaScript close or forced-termination acceptance. The successful final installed
+native run passed 5 assertions, separately from the completed Offline Demo check.
+Two preliminary harness runs failed assumptions about state creation/process
+observation; scoped failure cleanup was not counted as native close. The harness
+now allows bounded process-identity observation and does not assume startup creates
+persistent state. No product runtime change was required.
+
+Tauri uses Windows' local-data known folder for `jvcli-state`; it is not relocated
+by a child LOCALAPPDATA override. The path remains separate from terminal CLI
+state. Native Rust/real-CLI tests separately verify the absolute launch HOME with
+disposable state. Release packaging CI repeats native builds and automated installed
+acceptance on clean runners; one publisher combines same-commit Windows/Linux
+inventories. Main/tag/public download gates must pass before release completion.
+
 ## Controlled Windows live acceptance — 2026-10-02
 
 Desktop baseline: `635f16ccc48e47d79900e4f2f506cf4b133255cb`, version
@@ -55,15 +104,19 @@ Desktop-specific CLI state remained
 launch contract, not by reading credentials or session contents. Account identifiers,
 service responses, authentication bodies and private transcripts are not recorded.
 
-### Remaining live acceptance gap
+### Controlled Windows live acceptance: PASS
 
-The verified write/readback used PowerShell shell-file operations; no apply-patch
-command was rendered. Desktop's existing Rust and frontend mappings preserve valid
-`files.changed` frames. This pass did not intercept raw bridge/engine events, so
-the producer-side reason for the missing file-change activity is not proven.
-No event was fabricated or inferred from command text. The successful file write
-and assistant result do **not** satisfy the separately required live `files.changed`
-observation; full controlled Windows live acceptance remains incomplete.
+**JV DESKTOP WINDOWS CONTROLLED LIVE ACCEPTANCE PASSED.** The explicitly
+authorized second task completed, its file contents and assistant result matched,
+and native close cleaned up the owned processes.
+
+Event coverage note: the successful production turn modified the workspace through
+PowerShell command execution. The engine did not emit a separate
+`file_change`/`file_changes` item for that turn, so no `files.changed` event was
+available to Desktop. Synthetic bridge coverage separately verifies Desktop
+handling when `files.changed` is present. This is event-coverage information,
+not a failed file write or Desktop integration. No event was fabricated and no
+additional production task is needed.
 
 The temporary monitor initially expected a legacy Turn completed activity label.
 Protocol 1 intentionally maps `turn.completed` to Process finished and the
@@ -71,8 +124,8 @@ Turn complete outcome. Completion was therefore independently checked against
 that real UI outcome and the existing source mapping; this is a monitor limitation,
 not evidence of a Desktop completion defect. No extra production task was sent to
 correct the observer. Documentation-only validation uses `git diff --check`;
-new publication still requires exact-SHA Windows/Linux CI. Release packaging,
-signing, versioning and merge remain outside this pass.
+new publication still requires exact-SHA Windows/Linux CI. This live record does
+not authorize further production requests.
 
 ## Windows native GUI acceptance gap closure — 2026-10-02
 

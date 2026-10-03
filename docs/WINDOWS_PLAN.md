@@ -1,8 +1,8 @@
 # Windows native integration
 
 Target: AMD64 dedicated JV worker PCs, using an ordinary Windows account and
-WebView2. The native backend is implemented on `feature/windows-native`; Desktop
-remains version 0.1.1 and this is not a published Windows production release.
+WebView2. Desktop 0.2.0 adds official Windows 10/11 AMD64 support. ARM64 and
+WSL are not supported. JV CLI remains a separately installed runtime dependency.
 
 ## Execution contract
 
@@ -72,11 +72,29 @@ coding turn, exact UTF-8/Thai file creation/readback and the matching assistant
 result. Both normal native window closes cleaned up their owned bridge/process
 trees. The operator explicitly requested one additional attempt after locally
 stopping the first stalled turn; the first remote job's state remains unknown.
-No separate `files.changed` activity appeared for the successful shell-based
-write, so the full live event-coverage gate remains incomplete. See
+**Controlled Windows live acceptance: PASS.** No separate `files.changed`
+activity appeared because the successful write used command execution without
+an engine `file_change`/`file_changes` item. Synthetic tests cover that event
+when present; its absence does not invalidate the verified live result. See
 [the controlled live record](VALIDATION.md#controlled-windows-live-acceptance--2026-10-02)
 for evidence and limits. No further real task is authorized by this record.
 
-Windows release packaging/signing and versioning remain separate milestones.
-JV CLI remains separately installed. WSL, updates, terminal
-embedding, PTY/ConPTY and public release are outside this integration pass.
+## Release packaging
+
+The unsigned `JV-Desktop_0.2.0_x64-setup.exe` uses Tauri NSIS current-user
+installation, normally `%LOCALAPPDATA%\JV Desktop`. No Administrator privileges
+are required for installation or runtime. The installer creates user shortcuts
+and uninstall registration; it does not add Desktop to PATH or install JV CLI.
+WebView2 is required and may be obtained from Microsoft by the standard installer.
+
+Normal reinstall/upgrade and uninstall preserve Desktop application data.
+The uninstaller offers a separate, unchecked remove-data choice; do not select it
+when retaining sessions. Project files, terminal CLI state and the CLI installation
+are outside the installer inventory. Windows may show warnings for this unsigned
+installer. SHA-256 confirms bytes, not publisher identity.
+
+Release 0.2.0 is a minor version because it adds a supported platform, rather than
+a patch to 0.1.1. Both native package jobs build the same source/version; one job
+combines verified inventories and publishes only after green main checks. See
+[Development](DEVELOPMENT.md#release-preparation) for the offline release gates.
+WSL, updates, terminal embedding, PTY/ConPTY and signing remain outside this release.

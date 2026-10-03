@@ -163,11 +163,13 @@ offline assurance. Never add credentials to this probe.
 ## Release preparation
 
 Keep package.json, Cargo workspace, lockfiles and Tauri version consistent. Run
-the documented checks, commit validated source, then build all Linux bundles from
-that clean commit. `python3 scripts/release-assets.py` copies the three bundles to
-canonical filenames without spaces, plus SHA256SUMS and BUILD-INFO.json, under
-ignored `target/release-assets/<version>/`. Collection requires an empty output
-directory and preserves earlier versions. SHA256SUMS covers all bundles and
+the documented checks, commit validated source, then build normal native bundles
+from that clean commit. On Linux use `npm run tauri -- build --bundles deb,rpm,appimage`;
+on Windows use `npm run tauri -- build --bundles nsis`. Never package an
+`offline-fixture` build. `python scripts/release-assets.py --platform linux|windows`
+collects native bundles to canonical filenames without spaces under ignored
+`target/release-assets/<version>-<platform>/`. Collection requires an empty output
+directory and preserves earlier versions. SHA256SUMS covers the native bundles and
 BUILD-INFO.json; it cannot checksum itself. Its tool
 commands need the same Node PATH as the build. No reproducible-build certification
 is implied. CI builds independently from the exact tag; published hashes identify
@@ -175,12 +177,31 @@ those runner artifacts and can differ from local acceptance bundles.
 
 Run `python3 -B -m unittest discover -s tests -p 'test_release*.py' -v` for the
 offline collection/download round-trip and filename/integrity rejection cases.
-Before upload, `python3 -B scripts/release-assets.py --verify DIRECTORY` checks
+Before upload, `python3 -B scripts/release-assets.py --verify DIRECTORY --platform linux|windows` checks
 the exact inventory, safe filenames, nonempty files, unique checksums and
 BUILD-INFO sizes/hashes. `sha256sum -c SHA256SUMS` must also pass in that directory.
-The tag workflow derives its version from package.json, requires matching main
-and green main CI, refuses an existing release, and verifies two fresh downloads
-without renaming files. Published SHA256SUMS must byte-match the generated file.
+The package workflow runs on feature/main pushes as a publication-free rehearsal.
+Native Windows install/reinstall/WebView/uninstall checks use a clean runner user:
+`python -B scripts/windows-installer-smoke.py INSTALLER.exe`. This test refuses
+an existing Desktop registration, uses a disposable install directory and never
+installs JV CLI or logs in. Native picker/X acceptance is separate, using
+`node scripts/windows-native-gui-acceptance.mjs --app ABSOLUTE_INSTALLED.exe --guided`.
+The operator performs those native actions if supported automation is unavailable;
+state and process postconditions are automated. No production task is needed.
+Add `--installed` to that guided driver to use the real separately installed CLI,
+verify Offline Demo first, then open an unauthenticated bridge. The real Tauri app
+uses Windows' local-data known folder for its separate state path; overriding a
+child environment variable does not relocate that known folder. Readiness alone
+need not create state. The native CLI smoke separately proves HOME isolation with
+disposable state. Never sign in during release installation tests.
+
+The coordinator uses `scripts/release-assets.py --combine LINUX_DIR WINDOWS_DIR`
+to require both platform inventories at the same commit/version and create one
+four-package inventory with BUILD-INFO and SHA256SUMS. Final download verification
+uses `scripts/release-assets.py --verify DIRECTORY` (all platforms). The tag workflow
+requires matching green main checks and package rehearsal, refuses an existing
+release, and has one publisher after both builds pass. It verifies two fresh
+downloads without renaming files. Published SHA256SUMS must byte-match the generated file.
 
 Inspect/extract packages without modifying the development machine's package
 database. Test extracted executable/AppImage with isolated XDG paths and no network.

@@ -84,6 +84,16 @@ is cooperative first, followed by bounded termination of the owned bridge only.
 A remote job may continue; forced local termination cannot prove remote or
 escaped-descendant cancellation.
 
+## Installer boundary
+
+Windows release installation uses current-user NSIS with HKCU registration and
+user shortcuts. Normal upgrade/reinstall/uninstall preserves application data;
+the uninstaller's separate remove-data checkbox is unchecked by default.
+JV CLI, terminal CLI state and project folders are not installer contents and
+are not removed. Desktop does not silently install or update the CLI, create
+services or change Firewall/WFP policy. Windows packages are unsigned: published
+SHA-256 metadata verifies integrity, not publisher identity.
+
 ## Development and isolation
 
 Repositories and histories remain independent; never copy CLI source into Desktop.

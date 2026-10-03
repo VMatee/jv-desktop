@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "jv-desktop"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "jv-desktop-process",
  "serde",
@@ -1651,7 +1651,7 @@ dependencies = [
 
 [[package]]
 name = "jv-desktop-process"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "libc",
  "serde",
