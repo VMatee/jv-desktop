@@ -26,9 +26,11 @@ env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --r
 const child = spawn(resolve(app), [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });
 let stderrBytes = 0;
 child.stderr.on('data', (bytes) => { stderrBytes += bytes.length; if (stderrBytes > 65536) child.kill(); });
+const exited = new Promise((resolveExit) => child.once('exit', resolveExit));
 const results = [];
 let browser;
-async function pass(name, action) { await action(); results.push({ name, result: 'PASS' }); console.log(`PASS ${name}`); }
+let phase = 'WebView attachment';
+async function pass(name, action) { phase = name; await action(); results.push({ name, result: 'PASS' }); console.log(`PASS ${name}`); }
 try {
   for (let n = 0; n < 100; n++) {
     if (child.exitCode !== null) throw new Error('Native application exited before WebView attachment');
@@ -103,8 +105,15 @@ try {
   assert.deepEqual(external,[],'Frontend attempted external network');
   writeFileSync(resolve(cache,'results.json'), JSON.stringify({ fixture, results, nativeDialog:'Not driven: native computer-use helper unavailable', windowClose:'Not accepted: script close did not exit Desktop; process terminated after cooperative bridge close', productionCalls:0 },null,2));
   }
+} catch (error) {
+  // Static test phases/exit codes only: never publish child stderr, UI values,
+  // environment values or an authentication transcript as CI annotations.
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    console.error(`::error title=Installed WebView acceptance::Phase: ${phase}; error: ${error.name}; application exit: ${child.exitCode}; stderr bytes: ${stderrBytes}`);
+  }
+  throw error;
 } finally {
   if (browser) await browser.close();
-  child.kill();
-  await new Promise(resolveExit=>child.exitCode!==null ? resolveExit() : child.once('exit',resolveExit));
+  if (child.exitCode === null && child.signalCode === null) child.kill();
+  await exited;
 }

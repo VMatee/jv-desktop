@@ -62,6 +62,8 @@ def main():
             raise AssertionError(name)
         results.append(name)
         print('PASS', name, flush=True)
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            print(f'::notice title=Installed package assertion::{name}: PASS', flush=True)
 
     env = {k: os.environ[k] for k in ('SYSTEMROOT', 'WINDIR', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'TMP') if k in os.environ}
     env['PATH'] = str(Path(os.environ['SYSTEMROOT']) / 'System32')
