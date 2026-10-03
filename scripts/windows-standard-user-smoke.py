@@ -8,6 +8,7 @@ policies, registry security settings or the shipped application's configuration.
 import ctypes
 from ctypes import wintypes as W
 import os
+import msvcrt
 from pathlib import Path
 import subprocess
 import sys
@@ -57,6 +58,7 @@ K.CloseHandle.argtypes = [W.HANDLE]
 K.LocalFree.argtypes = [W.LPVOID]
 K.GetStdHandle.argtypes = [W.DWORD]
 K.GetStdHandle.restype = W.HANDLE
+K.DuplicateHandle.argtypes = [W.HANDLE, W.HANDLE, W.HANDLE, ctypes.POINTER(W.HANDLE), W.DWORD, W.BOOL, W.DWORD]
 K.CreateJobObjectW.argtypes = [W.LPVOID, W.LPCWSTR]
 K.CreateJobObjectW.restype = W.HANDLE
 K.SetInformationJobObject.argtypes = [W.HANDLE, ctypes.c_int, W.LPVOID, W.DWORD]
@@ -115,12 +117,16 @@ def verify_standard_token(token):
 def main():
     if len(sys.argv) != 3:
         raise SystemExit('usage: windows-standard-user-smoke.py ABSOLUTE_NODE.exe ABSOLUTE_INSTALLED_APP.exe')
-    node, app = (Path(value).resolve(strict=True) for value in sys.argv[1:])
-    if node.name.lower() != 'node.exe' or app.name.lower() != 'jv-desktop.exe':
+    probe = sys.argv[1] == '--probe'
+    node = Path(sys.argv[2] if probe else sys.argv[1]).resolve(strict=True)
+    app = None if probe else Path(sys.argv[2]).resolve(strict=True)
+    if node.name.lower() != 'node.exe' or (app is not None and app.name.lower() != 'jv-desktop.exe'):
         raise AssertionError('Only the fixed installed-app acceptance command is allowed')
-    argv = [str(node), str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(app), '--package-smoke']
+    argv = ([str(node), '-e', 'console.log("PASS standard-user launcher bootstrap")'] if probe else
+            [str(node), str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(app), '--package-smoke'])
     original, reduced, job, medium = W.HANDLE(), W.HANDLE(), W.HANDLE(), W.LPVOID()
     process = Process()
+    standard_handles = []
     try:
         require(A.OpenProcessToken(K.GetCurrentProcess(), 0x8b, ctypes.byref(original)))
         elevated = elevation(original)
@@ -130,12 +136,17 @@ def main():
             verify_standard_token(original)
             print('PASS installed-app test uses ordinary Windows privileges', flush=True)
             return subprocess.run(argv, cwd=ROOT, shell=False, timeout=85).returncode
-        require(A.CreateRestrictedToken(original, 0x5, 0, None, 0, None, 0, None, ctypes.byref(reduced)))
-        require(A.ConvertStringSidToSidW('S-1-16-8192', ctypes.byref(medium)))
-        label = SidAttributes(medium, 0x20)
-        require(A.SetTokenInformation(reduced, 25, ctypes.byref(label), ctypes.sizeof(label) + A.GetLengthSid(medium)))
+        size = W.DWORD()
+        if A.GetTokenInformation(original, 19, ctypes.byref(reduced), ctypes.sizeof(reduced), ctypes.byref(size)):
+            method = 'Windows linked standard-user token'
+        else:
+            require(A.CreateRestrictedToken(original, 0x5, 0, None, 0, None, 0, None, ctypes.byref(reduced)))
+            require(A.ConvertStringSidToSidW('S-1-16-8192', ctypes.byref(medium)))
+            label = SidAttributes(medium, 0x20)
+            require(A.SetTokenInformation(reduced, 25, ctypes.byref(label), ctypes.sizeof(label) + A.GetLengthSid(medium)))
+            method = 'restricted medium-integrity token'
         verify_standard_token(reduced)
-        print('::notice title=Installed-app privileges::Verified non-elevated non-admin medium-integrity test token', flush=True)
+        print(f'::notice title=Installed-app privileges::Verified non-elevated non-admin medium-integrity test token: {method}', flush=True)
         job = W.HANDLE(K.CreateJobObjectW(None, None))
         require(job)
         limits = JobLimits()
@@ -143,7 +154,14 @@ def main():
         require(K.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
         startup = Startup()
         startup.cb, startup.flags = ctypes.sizeof(startup), 0x100
-        startup.stdin, startup.stdout, startup.stderr = (K.GetStdHandle(value) for value in (-10, -11, -12))
+        # Python's stdio handles need explicit inheritable duplicates when using
+        # CreateProcessAsUser, rather than subprocess's own handle preparation.
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            handle = W.HANDLE()
+            require(K.DuplicateHandle(K.GetCurrentProcess(), msvcrt.get_osfhandle(stream.fileno()),
+                                      K.GetCurrentProcess(), ctypes.byref(handle), 0, True, 2))
+            standard_handles.append(handle)
+        startup.stdin, startup.stdout, startup.stderr = standard_handles
         command = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
         require(A.CreateProcessAsUserW(reduced, str(node), command, None, None, True, 4,
                                       None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)))
@@ -155,12 +173,14 @@ def main():
             raise TimeoutError('Standard-user installed WebView test exceeded its deadline')
         code = W.DWORD()
         require(K.GetExitCodeProcess(process.process, ctypes.byref(code)))
+        if code.value:
+            print(f'::error title=Standard-user test process::Child exit code: {code.value}', flush=True)
         return code.value
     finally:
         if process.process and K.WaitForSingleObject(process.process, 0) != 0:
             K.TerminateProcess(process.process, 1)
         if job: K.CloseHandle(job)
-        for handle in (process.thread, process.process, reduced, original):
+        for handle in (*standard_handles, process.thread, process.process, reduced, original):
             if handle: K.CloseHandle(handle)
         if medium: K.LocalFree(medium)
 

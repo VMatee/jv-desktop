@@ -107,9 +107,13 @@ jobs:
           node-version: '24.21.0'
           package-manager-cache: false
       - name: Provision job-local Rust
+        # Standard-user bootstrap runs first to diagnose test launcher failures
+        # without paying for a complete native package build.
         run: |
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update
           rustup default 1.98.1
+      - name: Standard-user Windows test launcher bootstrap
+        run: python -B scripts/windows-standard-user-smoke.py --probe (Get-Command node.exe).Source
       - run: npm ci
       - run: python -B -m unittest discover -s tests -p 'test_release*.py' -v
       - name: Build normal per-user unsigned NSIS installer
