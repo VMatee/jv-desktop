@@ -18,9 +18,11 @@ const port = await new Promise((resolvePort) => {
   const server = createServer(); server.listen(0, '127.0.0.1', () => { const p = server.address().port; server.close(() => resolvePort(p)); });
 });
 const env = {};
-for (const k of ['SYSTEMROOT', 'WINDIR', 'USERPROFILE', 'TEMP', 'TMP']) if (process.env[k]) env[k] = process.env[k];
-env.LOCALAPPDATA = resolve(cache, 'local'); env.APPDATA = resolve(cache, 'roaming');
-env.PATH = `${process.env.LOCALAPPDATA}\\Programs\\JV CLI;${process.env.SYSTEMROOT}\\System32`;
+// Preserve native runtime/profile locations; a LOCALAPPDATA override does not
+// relocate Tauri's known folder and can hide a per-user WebView2 installation.
+// Browser data still goes only to the disposable acceptance directory.
+for (const k of ['SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'TMP']) if (process.env[k]) env[k] = process.env[k];
+env.PATH = packageSmoke ? `${process.env.SYSTEMROOT}\\System32` : `${process.env.LOCALAPPDATA}\\Programs\\JV CLI;${process.env.SYSTEMROOT}\\System32`;
 env.WEBVIEW2_USER_DATA_FOLDER = resolve(cache, 'webview');
 env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`;
 const child = spawn(resolve(app), [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });

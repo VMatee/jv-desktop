@@ -5,6 +5,7 @@ No CLI installation, authentication, project changes, or production requests.
 Native picker/title-bar actions are a separate guided acceptance, not simulated here.
 """
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -72,6 +73,11 @@ def main():
     cli = Path(os.environ['LOCALAPPDATA']) / 'Programs/JV CLI/jvcli.exe'
     expected_cli = sha(cli) if cli.is_file() else None
     results = []
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        session = ctypes.c_ulong()
+        if not ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session)):
+            raise ctypes.WinError()
+        print(f'::notice title=Windows test session::Process session: {session.value}', flush=True)
 
     def check(name, condition):
         if not condition:
