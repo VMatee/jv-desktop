@@ -26,6 +26,20 @@ class SidAttributes(ctypes.Structure):
     _fields_ = [('sid', W.LPVOID), ('attributes', W.DWORD)]
 
 
+class Trustee(ctypes.Structure):
+    _fields_ = [('multiple', W.LPVOID), ('operation', ctypes.c_int),
+                ('form', ctypes.c_int), ('kind', ctypes.c_int), ('sid', W.LPVOID)]
+
+
+class AccessEntry(ctypes.Structure):
+    _fields_ = [('permissions', W.DWORD), ('mode', ctypes.c_int),
+                ('inheritance', W.DWORD), ('trustee', Trustee)]
+
+
+class AclSize(ctypes.Structure):
+    _fields_ = [('count', W.DWORD), ('used', W.DWORD), ('free', W.DWORD)]
+
+
 class SecurityAttributes(ctypes.Structure):
     _fields_ = [('length', W.DWORD), ('descriptor', W.LPVOID), ('inherit', W.BOOL)]
 
@@ -89,7 +103,15 @@ A.GetSidSubAuthorityCount.restype = ctypes.POINTER(ctypes.c_ubyte)
 A.GetSidSubAuthority.argtypes = [W.LPVOID, W.DWORD]
 A.GetSidSubAuthority.restype = ctypes.POINTER(W.DWORD)
 A.DuplicateToken.argtypes = [W.HANDLE, ctypes.c_int, ctypes.POINTER(W.HANDLE)]
+A.DuplicateTokenEx.argtypes = [W.HANDLE, W.DWORD, W.LPVOID, ctypes.c_int, ctypes.c_int, ctypes.POINTER(W.HANDLE)]
 A.CheckTokenMembership.argtypes = [W.HANDLE, W.LPVOID, ctypes.POINTER(W.BOOL)]
+A.GetSecurityInfo.argtypes = [W.HANDLE, ctypes.c_int, W.DWORD, W.LPVOID, W.LPVOID,
+                              ctypes.POINTER(W.LPVOID), W.LPVOID, ctypes.POINTER(W.LPVOID)]
+A.SetSecurityInfo.argtypes = [W.HANDLE, ctypes.c_int, W.DWORD, W.LPVOID, W.LPVOID, W.LPVOID, W.LPVOID]
+A.SetEntriesInAclW.argtypes = [W.DWORD, ctypes.POINTER(AccessEntry), W.LPVOID, ctypes.POINTER(W.LPVOID)]
+A.GetAclInformation.argtypes = [W.LPVOID, W.LPVOID, W.DWORD, ctypes.c_int]
+A.GetAce.argtypes = [W.LPVOID, W.DWORD, ctypes.POINTER(W.LPVOID)]
+A.EqualSid.argtypes = [W.LPVOID, W.LPVOID]
 A.CreateProcessAsUserW.argtypes = [W.HANDLE, W.LPCWSTR, W.LPWSTR, W.LPVOID, W.LPVOID, W.BOOL,
                                  W.DWORD, W.LPVOID, W.LPCWSTR, ctypes.POINTER(Startup), ctypes.POINTER(Process)]
 K.CreateProcessW.argtypes = A.CreateProcessAsUserW.argtypes[1:]
@@ -104,6 +126,68 @@ def elevation(token):
     value, size = W.DWORD(), W.DWORD()
     require(A.GetTokenInformation(token, 20, ctypes.byref(value), ctypes.sizeof(value), ctypes.byref(size)))
     return bool(value.value)
+
+
+def token_data(token, kind):
+    size = W.DWORD()
+    A.GetTokenInformation(token, kind, None, 0, ctypes.byref(size))
+    if not 0 < size.value <= 65536:
+        raise AssertionError('Unexpected token information size')
+    data = ctypes.create_string_buffer(size.value)
+    require(A.GetTokenInformation(token, kind, data, size, ctypes.byref(size)))
+    return data
+
+
+def user_grant(acl, sid, mask):
+    if not acl:
+        raise AssertionError('A null token ACL is not allowed')
+    size = AclSize()
+    require(A.GetAclInformation(acl, ctypes.byref(size), ctypes.sizeof(size), 2))
+    for index in range(size.count):
+        ace = W.LPVOID()
+        require(A.GetAce(acl, index, ctypes.byref(ace)))
+        if ctypes.c_ubyte.from_address(ace.value).value == 0:
+            granted = W.DWORD.from_address(ace.value + 4).value
+            if A.EqualSid(ace.value + 8, sid) and (granted & mask == mask or granted & 0x10000000):
+                return True
+    return False
+
+
+def grant_test_token_user(token):
+    """Grant only this account access to the newly copied test token and objects.
+
+    An elevated runner's token DACL can grant Administrators but omit its user.
+    After that group becomes deny-only, descendants cannot reopen their own
+    primary token. Never modify the original/linked login token or any file ACL.
+    """
+    user_data = token_data(token, 1)
+    sid = ctypes.cast(user_data, ctypes.POINTER(SidAttributes)).contents.sid
+    descriptor, object_acl, updated = W.LPVOID(), W.LPVOID(), W.LPVOID()
+    try:
+        error = A.GetSecurityInfo(token, 6, 4, None, None, ctypes.byref(object_acl), None, ctypes.byref(descriptor))
+        if error: raise ctypes.WinError(error)
+        default_data = token_data(token, 6)  # TokenDefaultDacl
+        default_acl = ctypes.cast(default_data, ctypes.POINTER(W.LPVOID)).contents.value
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            print('::notice title=Installed-app privileges::Current-user token grants before repair: object ' +
+                  str(user_grant(object_acl, sid, 0xf01ff)).lower() + '; default ' +
+                  str(user_grant(default_acl, sid, 0x10000000)).lower(), flush=True)
+        entry = AccessEntry(0xf01ff, 1, 0, Trustee(None, 0, 0, 1, sid))
+        error = A.SetEntriesInAclW(1, ctypes.byref(entry), object_acl, ctypes.byref(updated))
+        if error: raise ctypes.WinError(error)
+        error = A.SetSecurityInfo(token, 6, 4, None, None, updated, None)
+        if error: raise ctypes.WinError(error)
+        assert user_grant(updated, sid, 0xf01ff)
+        K.LocalFree(updated); updated = W.LPVOID()
+        entry.permissions = 0x10000000  # GENERIC_ALL for newly created objects.
+        error = A.SetEntriesInAclW(1, ctypes.byref(entry), default_acl, ctypes.byref(updated))
+        if error: raise ctypes.WinError(error)
+        value = W.LPVOID(updated.value)
+        require(A.SetTokenInformation(token, 6, ctypes.byref(value), ctypes.sizeof(value)))
+        assert user_grant(updated, sid, 0x10000000)
+    finally:
+        if updated: K.LocalFree(updated)
+        if descriptor: K.LocalFree(descriptor)
 
 
 def verify_standard_token(token):
@@ -146,11 +230,15 @@ def main():
         argv = [str(app)]
     elif probe:
         code = '''import fs from 'node:fs'; import {randomUUID} from 'node:crypto';
+        import {spawnSync} from 'node:child_process';
         import {join} from 'node:path'; try {
           fs.readFileSync(process.argv[1]); fs.mkdirSync(process.argv[2], {recursive:true});
           const file = join(process.argv[2], 'bootstrap-' + randomUUID());
           fs.writeFileSync(file, 'synthetic launcher check', {flag:'wx'}); fs.unlinkSync(file);
-          console.log('PASS standard-user launcher bootstrap: source read/cache write');
+          const child = spawnSync(process.execPath, ['-e','process.exit(0)'], {shell:false, timeout:3000, stdio:'ignore'});
+          if (child.error) throw child.error;
+          if (child.status !== 0) throw new Error('Child launch failed');
+          console.log('PASS standard-user launcher bootstrap: source read/cache write/child launch');
         } ''' + failure
         argv = [str(node), '--input-type=module', '-e', code,
                 str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(ROOT / '.cache/gui')]
@@ -164,7 +252,7 @@ def main():
     standard_handles = []
     read_pipe, write_pipe = W.HANDLE(), W.HANDLE()
     try:
-        require(A.OpenProcessToken(K.GetCurrentProcess(), 0x8b, ctypes.byref(original)))
+        require(A.OpenProcessToken(K.GetCurrentProcess(), 0x6008b, ctypes.byref(original)))
         elevated = elevation(original)
         if os.environ.get('GITHUB_ACTIONS') == 'true':
             print(f'::notice title=Windows test privileges::Runner elevated: {str(elevated).lower()}', flush=True)
@@ -175,14 +263,20 @@ def main():
                 return subprocess.run(argv, cwd=ROOT, shell=False, timeout=85).returncode
         else:
             size = W.DWORD()
-            if A.GetTokenInformation(original, 19, ctypes.byref(reduced), ctypes.sizeof(reduced), ctypes.byref(size)):
-                method = 'Windows linked standard-user token'
+            linked = W.HANDLE()
+            if A.GetTokenInformation(original, 19, ctypes.byref(linked), ctypes.sizeof(linked), ctypes.byref(size)):
+                try:
+                    require(A.DuplicateTokenEx(linked, 0x6008b, None, 2, 1, ctypes.byref(reduced)))
+                finally:
+                    K.CloseHandle(linked)
+                method = 'copied Windows linked standard-user token'
             else:
                 require(A.CreateRestrictedToken(original, 0x5, 0, None, 0, None, 0, None, ctypes.byref(reduced)))
                 require(A.ConvertStringSidToSidW('S-1-16-8192', ctypes.byref(medium)))
                 label = SidAttributes(medium, 0x20)
                 require(A.SetTokenInformation(reduced, 25, ctypes.byref(label), ctypes.sizeof(label) + A.GetLengthSid(medium)))
                 method = 'restricted medium-integrity token'
+            grant_test_token_user(reduced)
             verify_standard_token(reduced)
             print(f'::notice title=Installed-app privileges::Verified non-elevated non-admin medium-integrity test token: {method}', flush=True)
         job = W.HANDLE(K.CreateJobObjectW(None, None))
@@ -192,6 +286,9 @@ def main():
         require(K.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
         startup = Startup()
         startup.cb, startup.flags = ctypes.sizeof(startup), 0x100
+        # CreateProcessAsUser must select the interactive desktop explicitly.
+        # This uses existing access; it never changes its ACL or machine policy.
+        startup.desktop = 'winsta0\\default'
         # Python's stdio handles need explicit inheritable duplicates when using
         # CreateProcessAsUser, rather than subprocess's own handle preparation.
         for stream in (sys.stdin,):

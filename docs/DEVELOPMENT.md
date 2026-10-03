@@ -199,6 +199,12 @@ non-admin/medium-integrity execution and owns the suspended child with a
 kill-on-close Job. It creates no account, service or machine policy. The shipped
 app and CLI execution environment are unchanged; all installed UI assertions
 remain required.
+The helper copies a linked token or creates a new reduced token, grants its own
+account access to that test token and its default object ACL, and uses the existing
+interactive desktop. It never edits the original login token or filesystem ACLs.
+The early bootstrap proves source/cache access and native child creation before
+the package build.
+
 Add `--installed` to that guided driver to use the real separately installed CLI,
 verify Offline Demo first, then open an unauthenticated bridge. The real Tauri app
 uses Windows' local-data known folder for its separate state path; overriding a
