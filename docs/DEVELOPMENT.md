@@ -191,6 +191,14 @@ installs JV CLI or logs in. Native picker/X acceptance is separate, using
 `node scripts/windows-native-gui-acceptance.mjs --app ABSOLUTE_INSTALLED.exe --guided`.
 The operator performs those native actions if supported automation is unavailable;
 state and process postconditions are automated. No production task is needed.
+The installed WebView test runs at normal user privileges. Hosted Windows runners
+are elevated, and WebView2 150+ deliberately ignores environment-based debugging
+flags on elevated hosts ([upstream explanation](https://github.com/tauri-apps/wry/issues/1782)).
+The test-only `windows-standard-user-smoke.py` reduces its child token, verifies
+non-admin/medium-integrity execution and owns the suspended child with a
+kill-on-close Job. It creates no account, service or machine policy. The shipped
+app and CLI execution environment are unchanged; all installed UI assertions
+remain required.
 Add `--installed` to that guided driver to use the real separately installed CLI,
 verify Offline Demo first, then open an unauthenticated bridge. The real Tauri app
 uses Windows' local-data known folder for its separate state path; overriding a

@@ -11,7 +11,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import winreg
@@ -94,7 +96,10 @@ def main():
         check('install' if attempt == 0 else 'same-version reinstall', app.is_file() and uninstaller.is_file() and registration() == version)
         if os.environ.get('GITHUB_ACTIONS') == 'true':
             print(f'::notice title=WebView2 prerequisite::Runtime version after install: {webview_version()}', flush=True)
-        subprocess.run(['node', 'scripts/windows-webview-acceptance.mjs', str(app), '--package-smoke'], cwd=ROOT, check=True, timeout=90)
+        node = shutil.which('node')
+        if not node:
+            raise AssertionError('Acceptance requires the job-local Node executable')
+        subprocess.run([sys.executable, '-B', 'scripts/windows-standard-user-smoke.py', node, str(app)], cwd=ROOT, check=True, timeout=90)
         check('installed WebView launch' if attempt == 0 else 'reinstalled WebView launch', True)
         check('separate state preserved' if attempt == 0 else 'reinstall state preserved', sha(canary) == expected_canary)
     subprocess.run([str(uninstaller), '/S'], env=env, check=True, timeout=180)
