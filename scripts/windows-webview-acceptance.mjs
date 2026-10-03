@@ -7,6 +7,7 @@ import { createServer } from 'node:net';
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
 import { root } from './tool-env.mjs';
+import { supportCodeAcceptance } from './windows-support-code-acceptance.mjs';
 if (process.platform !== 'win32') throw new Error('Native Windows required');
 const app = process.argv[2];
 const fixture = process.argv.includes('--fixture');
@@ -126,6 +127,7 @@ try {
       await page.getByLabel('Message JV').fill('FIXTURE_SLOW_TURN'); await page.getByRole('button',{name:/Send message/}).click();
       await page.getByRole('button',{name:/Stop/}).click(); await page.getByText(/Remote job state is unknown/).waitFor();
     });
+    await supportCodeAcceptance(page, app, pass);
     await pass('reopening folder creates fresh unauthenticated bridge', async () => {
       await page.getByRole('button',{name:/Open Folder/}).click(); await page.getByLabel('Password').waitFor();
     });

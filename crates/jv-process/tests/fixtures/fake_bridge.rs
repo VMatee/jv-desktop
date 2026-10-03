@@ -125,6 +125,7 @@ fn main() {
         }
     }
     let mut turn = String::new();
+    let mut support_submissions = 0;
     for line in io::stdin().lock().lines() {
         let v: Value = serde_json::from_str(&line.unwrap()).unwrap();
         let id = v["request_id"].clone();
@@ -203,6 +204,67 @@ fn main() {
                     std::process::exit(9);
                 }
                 emit(json!({"type":"turn.started","request_id":id,"turn_id":"turn_fixture"}));
+                if let Some(case) = v["text"]
+                    .as_str()
+                    .and_then(|s| s.strip_prefix("FIXTURE_SUPPORT_"))
+                {
+                    support_submissions += 1;
+                    std::fs::write(
+                        cwd.join("support-submissions.json"),
+                        support_submissions.to_string(),
+                    )
+                    .unwrap();
+                    if case == "RECOVER" || case == "CANCEL" {
+                        emit(
+                            json!({"type":"turn.status","turn_id":"turn_fixture","source":"remote",
+                            "status":"waiting_for_auth","support_code":"JV-SVC-103",
+                            "public_message":"The AI service requires administrator authentication."}),
+                        );
+                        if case == "CANCEL" {
+                            continue;
+                        }
+                        fixture_gate(&cwd.join("support-running"));
+                        emit(
+                            json!({"type":"turn.status","turn_id":"turn_fixture","source":"remote","status":"running"}),
+                        );
+                        fixture_gate(&cwd.join("support-complete"));
+                        emit(
+                            json!({"type":"assistant.message","turn_id":"turn_fixture","text":"SYNTHETIC_RECOVERY_COMPLETE"}),
+                        );
+                        emit(
+                            json!({"type":"turn.completed","request_id":id,"turn_id":"turn_fixture"}),
+                        );
+                        continue;
+                    }
+                    let mut failure = json!({"type":"turn.failed","request_id":id,"turn_id":"turn_fixture","code":"engine_error",
+                        "source":"remote","support_code":"JV-SVC-002","private":"SYNTHETIC_PROVIDER_DIAGNOSTIC"});
+                    match case {
+                        "PROVIDER" => {}
+                        "TIMEOUT" => failure["support_code"] = json!("JV-TIMEOUT-001"),
+                        "LEGACY" | "LOCAL" => {
+                            failure.as_object_mut().unwrap().remove("source");
+                            failure.as_object_mut().unwrap().remove("support_code");
+                        }
+                        "MALFORMED" => failure["support_code"] = json!("JV-SVC-002\n"),
+                        "LONG" => {
+                            failure["support_code"] =
+                                json!("JV-AAAAAAAAAAAAAAAA-BBBBBBBBBBBBBBBB-001")
+                        }
+                        "NO_SOURCE" => {
+                            failure.as_object_mut().unwrap().remove("source");
+                        }
+                        "UNREVIEWED" => {
+                            failure["public_message"] = json!("SYNTHETIC_UNREVIEWED_PROSE")
+                        }
+                        "OVERSIZED" => {
+                            failure["public_message"] =
+                                json!("SYNTHETIC_OVERSIZED_PROSE".repeat(20))
+                        }
+                        _ => panic!("unknown support fixture"),
+                    }
+                    emit(failure);
+                    continue;
+                }
                 if scenario == "auth-resume" || scenario == "auth-wait" {
                     emit(
                         json!({"type":"turn.status", "turn_id":"turn_fixture", "source":"remote",
@@ -276,6 +338,18 @@ fn main() {
         }
     }
     cleanup(&mut owned_child);
+}
+
+fn fixture_gate(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !path.is_file() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "support fixture gate timed out"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    std::fs::remove_file(path).unwrap();
 }
 
 fn cleanup(child: &mut Option<std::process::Child>) {

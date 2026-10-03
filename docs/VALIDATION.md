@@ -1,5 +1,37 @@
 # Validation record
 
+## Windows remote support-code WebView acceptance - 2026-10-04
+
+The clean checkout fast-forwarded from
+`b2b3bdbaa94cfce11409475fb925461d4517a4a4` to Linux handoff
+`863377be2cad6f7ff64b9d7dec5866f4a2dd4ff0`. No local work was discarded.
+No product implementation correction was necessary. The fake bridge and existing
+Windows WebView driver were extended for the optional protocol-1 fields.
+
+The real native Tauri/WebView2 application, built with the explicit test-only
+`offline-fixture` feature, passed 22 automated checks, zero skips. Twelve cover
+support-code UI behavior: selectable JV-SVC-103 authentication attention with
+the turn active, Send unavailable and Stop enabled; running clears the notice;
+the same submission completes; a subsequent local failure has no stale code;
+terminal JV-SVC-002 and JV-TIMEOUT-001; legacy failure; malformed/overlong codes;
+missing remote source; unreviewed/oversized prose; and local Stop while waiting.
+Synthetic counters prove no duplicate submission. Historical activity remains
+visible while current attention/error state clears correctly.
+
+The fake bridge has no network client. Frontend external requests are blocked and
+asserted absent; synthetic sign-in clears its password and browser storage stays
+empty. Unknown diagnostics and unreviewed prose are absent from the UI. No real
+credentials, provider state, production login, job or inference is used. This
+exercises the real Rust supervisor, IPC and bundled React UI; it does not claim
+native folder-dialog or title-bar action coverage.
+
+Normal gates: frontend 63, Rust process/core/bridge/native 42, Tauri IPC 6,
+release-asset contracts 14; zero skips. Formatting, checks, Clippy and frontend
+build pass. Normal app/installer builds omit `offline-fixture`. Separate CLI
+validation uses source `96755e5f1f93f9b10f7d54ae128566cc1a63c4c7`, not the older
+v0.5.0 release tag. The unauthenticated GitHub Actions API returned 404; remote CI
+is not inferred from native local results. No versions, tags or releases changed.
+
 ## Desktop 0.2.1 dependency patch — 2026-10-03
 
 Starting Desktop main: `153de47a93287c704e3b4849eb9a416976d4770a` (0.2.0).
