@@ -91,6 +91,7 @@ A.DuplicateToken.argtypes = [W.HANDLE, ctypes.c_int, ctypes.POINTER(W.HANDLE)]
 A.CheckTokenMembership.argtypes = [W.HANDLE, W.LPVOID, ctypes.POINTER(W.BOOL)]
 A.CreateProcessAsUserW.argtypes = [W.HANDLE, W.LPCWSTR, W.LPWSTR, W.LPVOID, W.LPVOID, W.BOOL,
                                  W.DWORD, W.LPVOID, W.LPCWSTR, ctypes.POINTER(Startup), ctypes.POINTER(Process)]
+K.CreateProcessW.argtypes = A.CreateProcessAsUserW.argtypes[1:]
 
 
 def require(value):
@@ -126,10 +127,11 @@ def verify_standard_token(token):
 def main():
     if len(sys.argv) != 3:
         raise SystemExit('usage: windows-standard-user-smoke.py ABSOLUTE_NODE.exe ABSOLUTE_INSTALLED_APP.exe')
+    direct_app = sys.argv[1] == '--app'
     probe = sys.argv[1] == '--probe'
-    node = Path(sys.argv[2] if probe else sys.argv[1]).resolve(strict=True)
+    node = None if direct_app else Path(sys.argv[2] if probe else sys.argv[1]).resolve(strict=True)
     app = None if probe else Path(sys.argv[2]).resolve(strict=True)
-    if node.name.lower() != 'node.exe' or (app is not None and app.name.lower() != 'jv-desktop.exe'):
+    if (node is not None and node.name.lower() != 'node.exe') or (app is not None and app.name.lower() != 'jv-desktop.exe'):
         raise AssertionError('Only the fixed installed-app acceptance command is allowed')
     # Catch early module/cache failures before the WebView driver's own try block.
     # Emit only error categories, never paths, environment values or raw stderr.
@@ -139,7 +141,9 @@ def main():
         category(error.name) + '; code: ' + category(error.code) + '; operation: ' + category(error.syscall));
       process.exitCode = 1;
     }'''
-    if probe:
+    if direct_app:
+        argv = [str(app)]
+    elif probe:
         code = '''import fs from 'node:fs'; import {randomUUID} from 'node:crypto';
         import {join} from 'node:path'; try {
           fs.readFileSync(process.argv[1]); fs.mkdirSync(process.argv[2], {recursive:true});
@@ -153,6 +157,7 @@ def main():
         code = "import {pathToFileURL} from 'node:url'; try { await import(pathToFileURL(process.argv[1]).href); } " + failure
         argv = [str(node), '--input-type=module', '-e', code,
                 str(ROOT / 'scripts/windows-webview-acceptance.mjs'), str(app), '--package-smoke']
+    executable = str(app if direct_app else node)
     original, reduced, job, medium = W.HANDLE(), W.HANDLE(), W.HANDLE(), W.LPVOID()
     process = Process()
     standard_handles = []
@@ -165,18 +170,20 @@ def main():
         if not elevated:
             verify_standard_token(original)
             print('PASS installed-app test uses ordinary Windows privileges', flush=True)
-            return subprocess.run(argv, cwd=ROOT, shell=False, timeout=85).returncode
-        size = W.DWORD()
-        if A.GetTokenInformation(original, 19, ctypes.byref(reduced), ctypes.sizeof(reduced), ctypes.byref(size)):
-            method = 'Windows linked standard-user token'
+            if not direct_app:
+                return subprocess.run(argv, cwd=ROOT, shell=False, timeout=85).returncode
         else:
-            require(A.CreateRestrictedToken(original, 0x5, 0, None, 0, None, 0, None, ctypes.byref(reduced)))
-            require(A.ConvertStringSidToSidW('S-1-16-8192', ctypes.byref(medium)))
-            label = SidAttributes(medium, 0x20)
-            require(A.SetTokenInformation(reduced, 25, ctypes.byref(label), ctypes.sizeof(label) + A.GetLengthSid(medium)))
-            method = 'restricted medium-integrity token'
-        verify_standard_token(reduced)
-        print(f'::notice title=Installed-app privileges::Verified non-elevated non-admin medium-integrity test token: {method}', flush=True)
+            size = W.DWORD()
+            if A.GetTokenInformation(original, 19, ctypes.byref(reduced), ctypes.sizeof(reduced), ctypes.byref(size)):
+                method = 'Windows linked standard-user token'
+            else:
+                require(A.CreateRestrictedToken(original, 0x5, 0, None, 0, None, 0, None, ctypes.byref(reduced)))
+                require(A.ConvertStringSidToSidW('S-1-16-8192', ctypes.byref(medium)))
+                label = SidAttributes(medium, 0x20)
+                require(A.SetTokenInformation(reduced, 25, ctypes.byref(label), ctypes.sizeof(label) + A.GetLengthSid(medium)))
+                method = 'restricted medium-integrity token'
+            verify_standard_token(reduced)
+            print(f'::notice title=Installed-app privileges::Verified non-elevated non-admin medium-integrity test token: {method}', flush=True)
         job = W.HANDLE(K.CreateJobObjectW(None, None))
         require(job)
         limits = JobLimits()
@@ -197,8 +204,10 @@ def main():
         startup.stdin = standard_handles[0]
         startup.stdout = startup.stderr = write_pipe
         command = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
-        require(A.CreateProcessAsUserW(reduced, str(node), command, None, None, True, 4,
-                                      None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)))
+        create = A.CreateProcessAsUserW if elevated else K.CreateProcessW
+        prefix = (reduced,) if elevated else ()
+        require(create(*prefix, executable, command, None, None, True, 4,
+                       None, str(ROOT), ctypes.byref(startup), ctypes.byref(process)))
         # Assignment happens while suspended: all test descendants belong to us.
         require(K.AssignProcessToJobObject(job, process.process))
         K.CloseHandle(write_pipe)
@@ -228,7 +237,7 @@ def main():
         for line in output.decode('utf-8', errors='replace').splitlines():
             # This fixed offline command never signs in, starts a turn or prints
             # child stderr. Forward only its own assertions/static annotations.
-            if line.startswith(('PASS ', '::error title=')):
+            if not direct_app and line.startswith(('PASS ', '::error title=')):
                 print(line, flush=True)
         code = W.DWORD()
         require(K.GetExitCodeProcess(process.process, ctypes.byref(code)))

@@ -2,7 +2,7 @@
 // account: the fixture build uses only the Rust-selected sibling fake bridge.
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { createServer } from 'node:net';
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
@@ -11,6 +11,9 @@ if (process.platform !== 'win32') throw new Error('Native Windows required');
 const app = process.argv[2];
 const fixture = process.argv.includes('--fixture');
 const packageSmoke = process.argv.includes('--package-smoke');
+const standardUserOption = process.argv.indexOf('--standard-user-helper');
+const helperPython = standardUserOption < 0 ? null : process.argv[standardUserOption + 1];
+if (helperPython && (!packageSmoke || !isAbsolute(helperPython))) throw new Error('The standard-user helper requires package smoke and an absolute Python path');
 if (!app || !resolve(app).toLowerCase().endsWith('.exe')) throw new Error('usage: node scripts/windows-webview-acceptance.mjs ABSOLUTE_APP.exe [--fixture]');
 const cache = resolve(root, '.cache/gui', fixture ? 'fixture-run' : 'real-run');
 mkdirSync(cache, { recursive: true });
@@ -25,7 +28,7 @@ for (const k of ['SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'PROGRAMFILES', 'PROGRAM
 env.PATH = packageSmoke ? `${process.env.SYSTEMROOT}\\System32` : `${process.env.LOCALAPPDATA}\\Programs\\JV CLI;${process.env.SYSTEMROOT}\\System32`;
 env.WEBVIEW2_USER_DATA_FOLDER = resolve(cache, 'webview');
 env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`;
-const child = spawn(resolve(app), [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });
+const child = spawn(helperPython || resolve(app), helperPython ? ['-B', resolve(root,'scripts/windows-standard-user-smoke.py'), '--app', resolve(app)] : [], { cwd: cache, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: false });
 let stderrBytes = 0;
 child.stderr.on('data', (bytes) => { stderrBytes += bytes.length; if (stderrBytes > 65536) child.kill(); });
 let spawnError;

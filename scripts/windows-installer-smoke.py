@@ -99,7 +99,7 @@ def main():
         node = shutil.which('node')
         if not node:
             raise AssertionError('Acceptance requires the job-local Node executable')
-        subprocess.run([sys.executable, '-B', 'scripts/windows-standard-user-smoke.py', node, str(app)], cwd=ROOT, check=True, timeout=90)
+        subprocess.run([node, 'scripts/windows-webview-acceptance.mjs', str(app), '--package-smoke', '--standard-user-helper', sys.executable], cwd=ROOT, check=True, timeout=90)
         check('installed WebView launch' if attempt == 0 else 'reinstalled WebView launch', True)
         check('separate state preserved' if attempt == 0 else 'reinstall state preserved', sha(canary) == expected_canary)
     subprocess.run([str(uninstaller), '/S'], env=env, check=True, timeout=180)
