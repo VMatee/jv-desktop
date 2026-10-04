@@ -229,8 +229,10 @@ user-state deletion are included. Close the app before upgrading/removing it.
 
 ## Windows native acceptance (offline)
 
-The official [Windows CLI 0.5.0 release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0)
-must be installed separately before opt-in native acceptance. Ordinary tests never discover it.
+The official [Windows CLI 0.5.2 release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.2)
+is recommended and must be installed separately before opt-in native acceptance.
+The Windows compatibility minimum remains 0.5.0; 0.5.2 adds enhanced remote
+support-code/status reporting. Ordinary tests never discover the installed CLI.
 To explicitly smoke-test the installed CLI through Desktop's Rust process layer:
 
 ```powershell

@@ -11,7 +11,7 @@ Linux invocation is exactly `jvcli bridge --stdio`. Windows invocation is
 Desktop-owned `JVCLI_HOME`. Startup must return bridge.ready, protocol 1, compatible
 CLI version and matching workspace. Detection is local-only and proves neither
 authentication nor service health. Windows users install the independent
-[official JV CLI 0.5.0 Windows release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.0)
+[official JV CLI 0.5.2 Windows release](https://github.com/VMatee/jv-cli/releases/tag/v0.5.2)
 before Desktop. It retains Codex 0.149.1 and protocol 1. Desktop neither embeds
 nor updates that runtime; Linux users may keep their released 0.4.9 CLI.
 
@@ -60,9 +60,11 @@ release tests; any further live work needs separate authorization.
 ## Optional remote support codes
 
 Protocol 1 `turn.failed` may additionally carry `source: remote`, `support_code`,
-and optional `public_message`. Legacy `code: engine_error` remains valid. Enhanced
-CLI builds preserve public job/response fields through a typed failure and a
-per-turn memory field; released older CLIs still produce generic failures.
+and optional `public_message`. Legacy `code: engine_error` remains valid. JV
+CLI 0.5.2 preserves public job/response fields through a typed failure and a
+per-turn memory field and is the recommended companion release for enhanced
+remote support-code/status reporting. Older compatible CLIs remain supported
+with legacy generic failures and may omit intermediate status events.
 
 Rust and TypeScript independently require a full match of
 `JV-(?:[A-Z]{1,16}-){1,3}[0-9]{3}`, at most 32 ASCII characters. No provider mapping
@@ -108,5 +110,5 @@ The opt-in structured Responses API currently hides this intermediate provider
 state as `in_progress`; no auth-specific notice can be inferred from that envelope.
 
 Native Windows acceptance of the remote support-code and authentication-wait
-feature remains a separate downstream gate. Linux automated validation does not
-constitute Windows acceptance; no live service validation is implied.
+feature passed in the real Tauri WebView with synthetic bridge fixtures. See
+[Validation](VALIDATION.md) for coverage; no live service validation is implied.
