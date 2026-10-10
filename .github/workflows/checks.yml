@@ -1,7 +1,7 @@
 name: Desktop checks
 on:
   push:
-    branches: [main, feature/bridge-client, feature/windows-native]
+    branches: [main, feature/bridge-client, feature/windows-native, feature/structured-vision-windows]
   pull_request:
 permissions:
   contents: read

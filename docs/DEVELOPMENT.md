@@ -322,3 +322,20 @@ XDG_CURRENT_DESKTOP=XFCE dbus-run-session -- xvfb-run -a \
 
 This is Linux-only acceptance. See [Windows handoff](STRUCTURED_VISION_HANDOFF.md)
 for the remaining platform and release gates.
+
+## Windows structured vision transport acceptance
+
+The same `vision_fixture` Rust example supports Windows and retains the native
+supervisor's fixed trusted-host invocation. Build it with the existing Cargo
+wrapper, then run the CLI repository's `scripts/windows_vision_acceptance.py`
+with absolute `--engine`, `--node`, `--playwright`, and `--browsers` paths.
+Pass `--launcher` pointing to the verified candidate `jvcli.exe`, and
+`--desktop-probe` pointing to `target/debug/examples/vision_fixture.exe`.
+
+This executes two synthetic structured coding turns through the actual Rust
+supervisor. Omitting `--desktop-probe` tests bridge restart/resume instead.
+It verifies bounded UI events exclude credentials and image payloads, but does
+not prove the native WebView, folder picker or installer lifecycle. Those gates
+remain separate. Do not distribute an `offline-fixture` build. Replacing an
+existing user installation requires explicit operator authorization; otherwise
+use a clean test-user session for installer acceptance.

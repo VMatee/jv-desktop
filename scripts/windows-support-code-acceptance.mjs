@@ -61,13 +61,14 @@ export async function supportCodeAcceptance(page, app, pass) {
   });
   await pass('support F: subsequent local failure cannot reuse remote code', async () => {
     await submit('LOCAL');
-    await expect(alert).toContainText('JV could not complete the operation');
+    await expect(alert).toContainText('JV CLI could not complete this turn.');
+    await expect(alert).not.toContainText('bridge exited');
     await expect(alert.locator('code')).toHaveCount(0);
     await expect(notice).toHaveCount(0);
     await expect(input).toBeEnabled();
   });
   for (const [scenario, code] of [
-    ['PROVIDER', 'JV-SVC-002'], ['TIMEOUT', 'JV-TIMEOUT-001'], ['LEGACY', null],
+    ['PROVIDER', 'JV-SVC-002'], ['TIMEOUT', 'JV-TIMEOUT-001'], ['UNSUPPORTED', 'JV-AGENT-UNSUPPORTED-001'], ['LEGACY', null],
     ['MALFORMED', null], ['LONG', null], ['NO_SOURCE', null],
     ['UNREVIEWED', 'JV-SVC-002'], ['OVERSIZED', 'JV-SVC-002'],
   ]) {
@@ -82,8 +83,12 @@ export async function supportCodeAcceptance(page, app, pass) {
         await expect(alert).toContainText('JV could not complete this request.');
       } else {
         await expect(alert.locator('code')).toHaveCount(0);
-        await expect(alert).toContainText('JV could not complete the operation');
+        await expect(alert).toContainText('JV CLI could not complete this turn.');
       }
+      await expect(page.getByText('Session ready', { exact: true })).toBeVisible();
+      await expect(page.getByText('Structured session · Agent image tools enabled', { exact: true })).toBeVisible();
+      assert.equal(JSON.parse(readFileSync(resolve(workspace, 'session-transport.json'), 'utf8')), 'structured');
+      assert.equal(JSON.parse(readFileSync(submissions, 'utf8')), count);
       assert.doesNotMatch(await page.locator('body').innerText(), /SYNTHETIC_(?:PROVIDER_DIAGNOSTIC|UNREVIEWED_PROSE|OVERSIZED_PROSE)/);
     });
   }

@@ -1,6 +1,6 @@
-//! Opt-in Linux acceptance against the CLI repository's synthetic loopback fixture.
+//! Opt-in native acceptance against the CLI repository's synthetic loopback fixture.
 //! Fixed synthetic credentials; never use a production service or installed state.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn main() {
     use jv_desktop_process::{bridge::BridgeSupervisor, Access, Permissions};
     use std::path::PathBuf;
@@ -56,10 +56,10 @@ fn main() {
         assert!(completed);
     }
     bridge.shutdown();
-    println!("Desktop Linux supervisor: two structured coding turns passed; bounded UI events contain no image payloads or synthetic credentials.");
+    println!("Desktop native supervisor: two structured coding turns passed; bounded UI events contain no image payloads or synthetic credentials.");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn main() {
-    panic!("Linux acceptance only");
+    panic!("Linux or Windows acceptance only");
 }

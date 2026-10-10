@@ -1,8 +1,8 @@
 // Opt-in native Tauri WebView acceptance. No browser UI authentication or real
 // account: the fixture build uses only the Rust-selected sibling fake bridge.
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { createServer } from 'node:net';
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
@@ -16,8 +16,9 @@ const standardUserOption = process.argv.indexOf('--standard-user-helper');
 const helperPython = standardUserOption < 0 ? null : process.argv[standardUserOption + 1];
 if (helperPython && (!packageSmoke || !isAbsolute(helperPython))) throw new Error('The standard-user helper requires package smoke and an absolute Python path');
 if (!app || !resolve(app).toLowerCase().endsWith('.exe')) throw new Error('usage: node scripts/windows-webview-acceptance.mjs ABSOLUTE_APP.exe [--fixture]');
-const cache = resolve(root, '.cache/gui', fixture ? 'fixture-run' : 'real-run');
-mkdirSync(cache, { recursive: true });
+const cacheBase = resolve(root, '.cache/gui');
+mkdirSync(cacheBase, { recursive: true });
+const cache = mkdtempSync(resolve(cacheBase, fixture ? 'fixture-run-' : 'real-run-'));
 const port = await new Promise((resolvePort) => {
   const server = createServer(); server.listen(0, '127.0.0.1', () => { const p = server.address().port; server.close(() => resolvePort(p)); });
 });
@@ -115,6 +116,7 @@ try {
       await page.getByRole('button', {name:/Open Folder/}).click(); await page.getByLabel('Password').waitFor();
     });
     await pass('synthetic stdin sign-in and full-access session', async () => {
+      assert.equal(await page.getByLabel('Session mode').inputValue(), 'structured');
       await page.getByLabel('Username', {exact:true}).fill('synthetic'); await page.getByLabel('Service URL').fill('http://127.0.0.1:9'); await page.getByLabel('Password').fill('TEST_PASSWORD_DO_NOT_LEAK');
       await page.getByRole('button',{name:'Sign in',exact:true}).click(); await page.getByText('Session ready',{exact:true}).waitFor();
       assert.equal(await page.getByLabel('Password').count(),0); assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
@@ -130,6 +132,23 @@ try {
     await supportCodeAcceptance(page, app, pass);
     await pass('reopening folder creates fresh unauthenticated bridge', async () => {
       await page.getByRole('button',{name:/Open Folder/}).click(); await page.getByLabel('Password').waitFor();
+    });
+    await pass('explicit fresh Legacy session retains subsequent turn continuity', async () => {
+      await page.getByLabel('Session mode').selectOption('legacy');
+      await page.getByLabel('Password').fill('TEST_PASSWORD_DO_NOT_LEAK');
+      await page.getByRole('button',{name:'Sign in',exact:true}).click();
+      await page.getByText('Legacy session · Text tools only',{exact:true}).waitFor();
+      assert.equal(JSON.parse(readFileSync(resolve(dirname(app),'../workspace/success/session-transport.json'),'utf8')), 'legacy');
+      await page.getByLabel('Message JV').fill('Synthetic Legacy follow-up');
+      await page.getByRole('button',{name:/Send message/}).click();
+      await page.getByText('Turn complete',{exact:true}).waitFor();
+    });
+    await pass('genuine bridge termination differs from a failed agent turn', async () => {
+      await page.getByLabel('Message JV').fill('FIXTURE_BRIDGE_EXIT');
+      await page.getByRole('button',{name:/Send message/}).click();
+      await page.getByRole('alert').filter({hasText:'bridge exited'}).waitFor();
+      await page.getByText('Sign-in required',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('button',{name:/Send message/}).isDisabled(), true);
     });
   }
   await page.screenshot({path:resolve(cache,'window.png')});

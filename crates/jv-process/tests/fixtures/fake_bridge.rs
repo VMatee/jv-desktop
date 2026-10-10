@@ -152,6 +152,11 @@ fn main() {
                     assert!(v.get("transport").is_none());
                 } else {
                     assert!(v["transport"] == "structured" || v["transport"] == "legacy");
+                    std::fs::write(
+                        cwd.join("session-transport.json"),
+                        v["transport"].to_string(),
+                    )
+                    .unwrap();
                     response["transport"] = if scenario == "wrong-transport" {
                         json!("legacy")
                     } else {
@@ -175,6 +180,9 @@ fn main() {
             }
             "turn.start" => {
                 turn = id.as_str().unwrap().into();
+                if v["text"] == "FIXTURE_BRIDGE_EXIT" {
+                    std::process::exit(9);
+                }
                 if scenario == "oversized" {
                     emit(json!({"type":"future.event","value":"x".repeat(140_000)}));
                     continue;
@@ -254,6 +262,9 @@ fn main() {
                         "source":"remote","support_code":"JV-SVC-002","private":"SYNTHETIC_PROVIDER_DIAGNOSTIC"});
                     match case {
                         "PROVIDER" => {}
+                        "UNSUPPORTED" => {
+                            failure["support_code"] = json!("JV-AGENT-UNSUPPORTED-001")
+                        }
                         "TIMEOUT" => failure["support_code"] = json!("JV-TIMEOUT-001"),
                         "LEGACY" | "LOCAL" => {
                             failure.as_object_mut().unwrap().remove("source");
