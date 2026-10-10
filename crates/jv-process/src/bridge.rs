@@ -108,6 +108,7 @@ pub fn version(program: PathBuf, cwd: PathBuf) -> Result<String, E> {
 
 pub struct BridgeSupervisor {
     workspace: PathBuf,
+    structured_supported: bool,
     inner: Mutex<Transport>,
     cancel: AtomicBool,
     stopping: AtomicBool,
@@ -135,6 +136,10 @@ impl BridgeSupervisor {
             }
             Ok(Self {
                 workspace,
+                structured_supported: ready["capabilities"]["tool_images"] == true
+                    && ready["capabilities"]["transports"]
+                        .as_array()
+                        .is_some_and(|values| values.iter().any(|v| v == "structured")),
                 inner: Mutex::new(transport),
                 cancel: AtomicBool::new(false),
                 stopping: AtomicBool::new(false),
@@ -151,6 +156,19 @@ impl BridgeSupervisor {
         password: String,
         permissions: Permissions,
     ) -> Result<(), E> {
+        self.authenticate_with_transport(username, base_url, password, permissions, false)
+    }
+    pub fn authenticate_with_transport(
+        &self,
+        username: String,
+        base_url: String,
+        password: String,
+        permissions: Permissions,
+        structured: bool,
+    ) -> Result<(), E> {
+        if structured && !self.structured_supported {
+            return Err(E::UpgradeRequired);
+        }
         if username.trim().is_empty()
             || username.len() > 256
             || base_url.len() > 2048
@@ -176,6 +194,9 @@ impl BridgeSupervisor {
         result?;
         let mut request = policy.clone();
         request["type"] = json!("session.start");
+        if self.structured_supported {
+            request["transport"] = json!(if structured { "structured" } else { "legacy" });
+        }
         let response = t.exchange(
             &mut request,
             "session.started",
@@ -186,6 +207,8 @@ impl BridgeSupervisor {
             return Err(E::ProcessFailed);
         }
         if response["session_id"].as_str().is_none_or(|s| !valid_id(s))
+            || (self.structured_supported
+                && response["transport"] != if structured { "structured" } else { "legacy" })
             || response["network"] != policy["allow_network"]
             || response["sandbox"]
                 != if cfg!(target_os = "windows") {

@@ -26,8 +26,9 @@ describe('public remote failures', () => {
   });
   it.each(['JV-SVC-103\u2028', 'JV-SVC-103\u2029', 'JV-SVC-103\n', 'JV-SVC-103\u0000', 'JV-secret-001', 'https://secret', 'JV-' + 'A'.repeat(30) + '-001', null])('rejects malformed code %s', (code) => {
     const event = parseBridgeEvent({ type: 'turn.failed', source: 'remote', support_code: code, public_message: 'SECRET' });
-    expect(event).toMatchObject({ category: 'process-failed', source: 'local' });
+    expect(event).toMatchObject({ category: 'turn-failed' });
     expect(event).not.toHaveProperty('code');
+    expect(event).not.toHaveProperty('source');
     expect(JSON.stringify(event)).not.toContain('SECRET');
   });
   it.each(['<html>selector SECRET</html>', 'x'.repeat(257), 'token=SECRET', 'The AI service requires administrator authentication.\n', undefined])('drops untrusted prose', (message) => {
@@ -36,7 +37,7 @@ describe('public remote failures', () => {
   });
   it('keeps legacy and local failures generic', () => {
     for (const fields of [{ code: 'engine_error', message: 'SECRET' }, { source: 'local', support_code: 'JV-SVC-103' }]) {
-      expect(parseBridgeEvent({ type: 'turn.failed', ...fields })).toMatchObject({ category: 'process-failed', source: 'local' });
+      expect(parseBridgeEvent({ type: 'turn.failed', ...fields })).toMatchObject({ category: 'turn-failed' });
     }
   });
 });

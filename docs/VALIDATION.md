@@ -1,5 +1,56 @@
 # Validation record
 
+## Linux structured vision integration — 2026-10-10
+
+Validated on `small-server-MS-7D09`, Linux x86_64, with separate CLI and Desktop
+`feature/structured-vision-linux` branches. Starting commits were CLI
+`9a8aa1060d79657db48a84d5d93efb27c05f66d8` and Desktop
+`b9d9ff3e2576552d7bc57b7303351646ab3656c9`. Existing dirty changes were preserved
+in workspace rollback bundles/patches before implementation. Both fetched main
+histories matched those starting commits; no remote source replaced local work.
+
+Desktop now explicitly negotiates Structured transport on protocol 1, preserves
+Legacy mode for older bridges, and distinguishes failed turns from process exit.
+PNG/JPEG/WebP results use the CLI's structured transport; bounded Desktop status
+events do not carry image data. Chat attachments remain unavailable.
+
+Passed checks:
+
+- CLI: 532 tests, 92 expected platform-specific skips; package manifest 144 files.
+  Real pinned-engine smoke, agent smoke and completion smoke passed. Completion
+  smoke retained six image observations with four active images and exactly-once
+  shell effects. Malformed image/history/replay and cancellation regression pass.
+- Direct real-CLI bridge fixture: generated/build/tested a website, captured
+  screenshots, inspected PNG/JPEG/WebP, validated bytes at a loopback synthetic
+  provider, edited a file afterward, reran tests, completed, restarted/resumed,
+  and completed a second turn. Unsupported service preserved its public code and
+  the bridge; there was no automatic retry. A fresh explicit Legacy session passed.
+- Actual Desktop Rust supervisor with the real CLI completed the same two-turn
+  synthetic image workflow. UI event bounds and credential/image exclusions passed.
+- Desktop: 65 frontend tests, 26 Linux Rust core/bridge/process tests, 5 Tauri IPC
+  tests, 1 browser acceptance and 14 release-asset tests. Frontend build, Rust
+  format/check/Clippy, Tauri check and normal release build passed.
+- Actual production Tauri GUI, using the executable extracted from its Debian
+  package in private Xvfb/D-Bus state: native folder picker, synthetic sign-in,
+  both image coding turns, final website contents, unsupported-service support
+  code, preserved structured session, failed-turn state and native window close
+  passed. Password/token/image markers were absent from application logs and UI.
+  This used no `offline-fixture` feature and did not disable WebKit's sandbox.
+
+The CLI source ZIP passed integrity verification and installation/version reporting
+in a disposable home with `--no-engine`; real-engine acceptance used the source
+checkout's pinned runtime separately. Desktop Debian/RPM/AppImage builds passed.
+Debian and AppImage extraction passed; the Debian executable passed native GUI
+acceptance. No system package-manager installation was performed. The host has no
+RPM verifier, so no RPM installation/signature acceptance is claimed. These are
+unpublished development packages retaining CLI 0.5.2/Desktop 0.2.2 version labels.
+
+All inference acceptance above uses a scripted synthetic provider; this is not
+real-model vision acceptance. No production account/job, original Snake Game,
+Windows execution, release tag or installer publication was used. Windows-native
+integration, installer execution, coordinated source regression and release gates
+remain in [the handoff](STRUCTURED_VISION_HANDOFF.md).
+
 ## Windows remote support-code WebView acceptance - 2026-10-04
 
 The clean checkout fast-forwarded from

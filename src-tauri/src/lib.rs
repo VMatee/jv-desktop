@@ -288,6 +288,8 @@ struct LoginRequest {
     base_url: String,
     password: String,
     permissions: Permissions,
+    #[serde(default)]
+    structured: bool,
 }
 #[tauri::command]
 async fn authenticate(
@@ -302,11 +304,12 @@ async fn authenticate(
         .clone()
         .ok_or(ErrorCategory::AuthenticationRequired)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let result = bridge.authenticate(
+        let result = bridge.authenticate_with_transport(
             request.username,
             request.base_url,
             request.password,
             request.permissions,
+            request.structured,
         );
         if result.is_err() {
             bridge.shutdown();

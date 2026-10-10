@@ -55,6 +55,32 @@ mod native {
         .unwrap()
     }
     #[test]
+    fn structured_mode_is_explicit_and_never_silently_downgraded() {
+        for scenario in ["success", "legacy-bridge", "wrong-transport"] {
+            let b = start(scenario).unwrap();
+            let result = b.authenticate_with_transport(
+                "synthetic".into(),
+                "http://127.0.0.1:9".into(),
+                "TEST_PASSWORD_DO_NOT_LEAK".into(),
+                permissions(),
+                true,
+            );
+            match scenario {
+                "success" => {
+                    result.unwrap();
+                    b.run_turn("inspect screenshot".into(), permissions(), |_| Ok(()))
+                        .unwrap();
+                }
+                "legacy-bridge" => {
+                    assert_eq!(result, Err(ErrorCategory::UpgradeRequired));
+                    login(&b);
+                }
+                _ => assert_eq!(result, Err(ErrorCategory::ProtocolError)),
+            }
+            b.shutdown();
+        }
+    }
+    #[test]
     fn version_and_ready() {
         assert!(!compatible("JV CLI 0.4.8"));
         assert_eq!(compatible("JV CLI 0.4.9"), !cfg!(target_os = "windows"));

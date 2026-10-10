@@ -21,7 +21,7 @@ export function parseBridgeEvent(value: unknown): DesktopEvent | null {
     case 'turn.completed': return { type: 'run-finished', outcome: 'completed' };
     case 'turn.failed': {
       const remote = value.source === 'remote' ? remoteError(value.support_code, value.public_message) : null;
-      return remote ? { type: 'error', ...remote } : { type: 'error', category: 'process-failed', source: 'local', message: errorMessages['process-failed'] };
+      return remote ? { type: 'error', ...remote } : { type: 'error', category: 'turn-failed', message: errorMessages['turn-failed'] };
     }
     case 'turn.cancelled': return value.local === true && value.remote_state === 'unknown' ? { type: 'run-finished', outcome: 'cancelled' } : null;
     default: return null;

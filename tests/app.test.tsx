@@ -68,6 +68,28 @@ describe('IME-safe composer', () => {
 });
 
 describe('memory-only bridge sign-in', () => {
+  it.each(['structured', 'legacy'])('explicitly selects %s without exposing attachment inputs', async (transport) => {
+    const authenticate = vi.fn(async () => {});
+    const native: JvBackend = {
+      detectBackend: async () => ({ availability: 'detected', canRun: true, detail: 'Synthetic CLI' }),
+      chooseWorkspace: async () => '/synthetic/workspace', authenticate,
+      runTurn: vi.fn(), cancelTurn: vi.fn(),
+    };
+    const { container } = render(<App backends={{ demo: native, native }} />);
+    fireEvent.change(screen.getByLabelText('Backend mode'), { target: { value: 'native' } });
+    await screen.findByText('JV CLI: detected');
+    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    const mode = await screen.findByLabelText('Session mode') as HTMLSelectElement;
+    expect(mode.value).toBe('structured');
+    fireEvent.change(mode, { target: { value: transport } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'synthetic' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'FAKE_PASSWORD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ structured: transport === 'structured' })));
+    expect(container.querySelector('input[type=file]')).toBeNull();
+    expect(await screen.findByText(transport === 'structured' ? 'Structured session · Agent image tools enabled' : 'Legacy session · Text tools only')).toBeTruthy();
+  });
+
   it('requires explicit sign-in, clears password on failure, locks policy after success', async () => {
     const authenticate = vi.fn().mockRejectedValueOnce('authentication-required').mockResolvedValueOnce(undefined);
     const native: JvBackend = {
@@ -127,10 +149,13 @@ describe('public support code presentation', () => {
       expect(alert.querySelector('code')?.textContent).toBe(code);
       if (code === 'JV-SVC-103') expect(alert.textContent).toContain('The AI service requires administrator authentication.');
     } else {
-      expect(alert.textContent).toContain('JV could not complete the operation or the bridge exited.');
+      expect(alert.textContent).toContain('JV CLI could not complete this turn. No detailed cause was provided.');
+      expect(alert.textContent).not.toContain('sign in again');
       expect(alert.querySelector('code')).toBeNull();
     }
     expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.getByText('Turn did not complete')).toBeTruthy();
+    expect(screen.queryByText('Session ready. Send a task when you are ready.')).toBeNull();
     expect(document.body.textContent).not.toContain('SECRET');
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);

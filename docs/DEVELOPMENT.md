@@ -278,3 +278,47 @@ automation is unavailable, the operator performs only folder selection/Cancel
 and title-bar X actions; all state and process assertions are automated. See
 [native GUI acceptance](MANUAL_GUI_ACCEPTANCE.md#native-manual-actions-with-automated-postconditions).
 Keep all test state/output ignored.
+
+## Linux structured vision acceptance (synthetic service)
+
+Use matching `feature/structured-vision-linux` CLI and Desktop source. The normal
+production Tauri build negotiates `tool_images` and `structured` on bridge
+protocol 1, then explicitly selects the transport at session start. No image
+bytes pass through Desktop status events. Chat image attachments remain disabled.
+A provider rejection fails the turn without retrying in Legacy mode; reopen the
+folder and select Legacy explicitly if needed. Transport cannot change on resume.
+
+The opt-in fixture uses only a loopback scripted provider and synthetic credentials.
+It exercises the real pinned engine, CLI, screenshot tools and structured image
+transport; it does **not** prove a real model understood the images. Existing
+Pillow, Chromium/Playwright and repository-local Node are prerequisites. From
+Desktop, with local Node on PATH:
+
+```sh
+node scripts/cargo.mjs build -p jv-desktop-process --example vision_fixture --locked
+python3 -B ../jvcli/scripts/vision_bridge_smoke.py \
+  --node "$PWD/.tools/node/bin/node" --playwright "$PWD/node_modules/playwright" \
+  --browsers "$PWD/.cache/ms-playwright" \
+  --desktop-probe "$PWD/target/debug/examples/vision_fixture"
+```
+
+Omit `--desktop-probe` to test CLI bridge restart/resume. Both variants generate
+and test a small website, capture PNG/JPEG, generate WebP, execute three
+`view_image` calls, validate image content at the synthetic provider, perform a
+follow-up file edit and final tests, then complete another turn. They separately
+check unsupported structured service behavior and a fresh explicit Legacy session.
+Private temporary evidence stays outside Git; durable engine history may contain
+images by design, while bridge/UI events and application logs must not.
+
+The native GUI driver additionally requires the host's existing AT-SPI Python
+bindings, Gdk, Xvfb, D-Bus, xwininfo and xfwm4. It launches the real application, native picker,
+synthetic login, two structured turns and an unsupported-service turn:
+
+```sh
+npm run tauri -- build --no-bundle
+XDG_CURRENT_DESKTOP=XFCE dbus-run-session -- xvfb-run -a \
+  python3 -B scripts/linux-vision-acceptance.py --cli-root ../jvcli
+```
+
+This is Linux-only acceptance. See [Windows handoff](STRUCTURED_VISION_HANDOFF.md)
+for the remaining platform and release gates.

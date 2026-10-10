@@ -1,7 +1,8 @@
 import type { DesktopError, ErrorCategory, PublicSupport } from '../types/events';
 export const errorMessages: Record<ErrorCategory, string> = {
   'remote-failed': 'JV could not complete this request.',
-  'upgrade-required': 'Upgrade JV CLI to the version required for your platform, then check again.',
+  'turn-failed': 'JV CLI could not complete this turn. No detailed cause was provided. Review the activity and any changed files before continuing.',
+  'upgrade-required': 'Upgrade JV CLI to a compatible version for the selected session mode, then reopen the folder. Older bridges can use Legacy mode.',
   'protocol-error': 'The local bridge returned invalid protocol data. Reopen the workspace to reconnect.',
   unavailable: 'JV CLI was not found. Install the official CLI for your platform and check again.',
   'invalid-workspace': 'Choose an existing project folder, outside your home root or application folder.',

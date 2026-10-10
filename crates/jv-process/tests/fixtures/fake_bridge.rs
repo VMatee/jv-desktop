@@ -100,6 +100,10 @@ fn main() {
         }
     }
     let mut ready = json!({"type":"bridge.ready","protocol":if scenario=="mismatch"{2}else{1},"cli_version":current_version,"workspace":cwd});
+    if scenario != "legacy-bridge" {
+        ready["capabilities"] =
+            json!({"images":false,"tool_images":true,"transports":["legacy","structured"]});
+    }
     if scenario == "wrong-workspace" {
         ready["workspace"] = json!("unselected");
     }
@@ -144,6 +148,16 @@ fn main() {
             }
             "session.start" => {
                 let mut response = json!({"type":"session.started","request_id":id,"session_id":"fixture","network":v["allow_network"],"sandbox":if cfg!(target_os = "windows") {"danger-full-access"} else if v["read_only"]==true{"read-only"}else{"workspace-write"}});
+                if scenario == "legacy-bridge" {
+                    assert!(v.get("transport").is_none());
+                } else {
+                    assert!(v["transport"] == "structured" || v["transport"] == "legacy");
+                    response["transport"] = if scenario == "wrong-transport" {
+                        json!("legacy")
+                    } else {
+                        v["transport"].clone()
+                    };
+                }
                 if scenario == "wrong-policy" {
                     response["sandbox"] = json!(if cfg!(target_os = "windows") {
                         "workspace-write"

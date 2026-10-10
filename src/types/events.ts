@@ -1,6 +1,6 @@
 export type DiagnosticReason = 'malformed-json' | 'invalid-event' | 'unknown-event' | 'oversized-event' | 'invalid-utf8';
 export type ErrorCategory = 'unavailable' | 'upgrade-required' | 'protocol-error' | 'invalid-workspace' | 'invalid-prompt' | 'permission-conflict'
-  | 'remote-failed' | 'authentication-required' | 'unsupported-platform' | 'process-failed' | 'timeout' | 'stream-limit' | 'internal';
+  | 'remote-failed' | 'turn-failed' | 'authentication-required' | 'unsupported-platform' | 'process-failed' | 'timeout' | 'stream-limit' | 'internal';
 export interface PublicSupport {
   message: string;
   source?: 'local' | 'remote';
@@ -31,7 +31,7 @@ export interface BackendStatus {
   minimumCliVersion?: string;
 }
 export interface JvBackend {
-  authenticate?(request: { username: string; baseUrl: string; password: string; permissions: Permissions }): Promise<void>;
+  authenticate?(request: { username: string; baseUrl: string; password: string; permissions: Permissions; structured?: boolean }): Promise<void>;
   close?(): Promise<void>;
   detectBackend(): Promise<BackendStatus>;
   chooseWorkspace(): Promise<string | null>;

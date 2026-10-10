@@ -24,6 +24,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   const [username, setUsername] = useState('');
   const [baseUrl, setBaseUrl] = useState('https://ai.openjvspace.com');
   const [password, setPassword] = useState('');
+  const [structured, setStructured] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [permissions, setPermissions] = useState<Permissions>({ access: 'read-only', network: false });
   const trustedHost = mode === 'native' && status?.executionMode === 'trusted-host';
@@ -70,7 +71,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
     });
     if (event.type === 'remote-status') setRemoteStatus(event.status === 'waiting_for_auth' ? event : null);
     if (event.type === 'error' || event.type === 'run-finished') setRemoteStatus(null);
-    if (event.type === 'error') setError(event);
+    if (event.type === 'error') { setError(event); setOutcome('Turn did not complete'); }
     if (event.type === 'run-finished') setOutcome(event.outcome === 'cancelled' ? (mode === 'demo' ? 'Turn stopped. No further demo events will arrive.' : 'Stopped locally. Remote job state is unknown; a submitted job may continue.') : event.outcome === 'completed' ? 'Turn complete' : 'Turn did not complete');
   }
   async function send() {
@@ -92,7 +93,7 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
   async function login() {
     if (!workspace || !backend.authenticate || signingIn) return;
     setSigningIn(true); setError(null);
-    try { await backend.authenticate({ username, baseUrl, password, permissions: activePermissions }); setSignedIn(true); }
+    try { await backend.authenticate({ username, baseUrl, password, permissions: activePermissions, structured }); setSignedIn(true); }
     catch (failure) { setError(safeError(failure)); setSignedIn(false); }
     finally { setPassword(''); setSigningIn(false); }
   }
@@ -114,10 +115,15 @@ export default function App({ backends: supplied }: { backends?: Record<BackendM
       <label>Username<input value={username} onChange={(e) => setUsername(e.target.value)} disabled={signingIn} autoComplete="off" /></label>
       <label>Service URL<input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} disabled={signingIn} /></label>
       <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={signingIn} autoComplete="new-password" /></label>
+      <label>Session mode<select aria-label="Session mode" value={structured ? 'structured' : 'legacy'} onChange={(e) => setStructured(e.target.value === 'structured')} disabled={signingIn}>
+        <option value="structured">Structured — agent screenshot inspection</option><option value="legacy">Legacy — text tools only</option>
+      </select></label>
       <button className="primary" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in / starting session…' : 'Sign in'}</button>
       <small>Sign-in contacts the selected service. Password is held in memory only. {trustedHost ? 'Signing in starts a trusted-host session on this dedicated worker.' : 'Choose permissions below first; signing in also starts your workspace session.'}</small>
+      <small>Structured mode requires a compatible CLI and service account. The agent can inspect local images; chat attachments are unavailable. If unsupported, reopen the folder and explicitly choose Legacy. Failed requests are never automatically resent in another mode.</small>
     </form>}
     <main className="main-grid"><div className="chat-panel"><div className="panel-heading"><h2>Conversation</h2><span>{mode === 'demo' ? 'Simulated session' : signedIn ? 'Session ready' : 'Sign-in required'}</span></div>
+      {mode === 'native' && signedIn && <p className="turn-outcome">{structured ? 'Structured session · Agent image tools enabled' : 'Legacy session · Text tools only'}</p>}
       <Conversation messages={messages} busy={busy} demo={mode === 'demo'} />
       {remoteStatus && <div className="error-banner" role="status" aria-label="Remote service status"><div>
         <p>Waiting for administrator attention</p>

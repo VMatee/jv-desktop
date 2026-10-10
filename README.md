@@ -91,6 +91,11 @@ Release packages are unsigned.
    or 0.4.9 or newer on Linux.
 2. Open JV Desktop. **Offline Demo** is the default and never contacts JV.
 3. Select **Native JV CLI**, then **Open Folder** and choose a dedicated project.
+   Choose **Structured — agent screenshot inspection** for local agent image tools
+   with a compatible CLI and service account. **Legacy — text tools only** is an
+   explicit fallback for older installations or unsupported accounts. Changing
+   modes requires reopening the folder; failed requests are never automatically
+   resent. This does not add image attachments to the chat composer.
    Select the folder again if you switched from Demo.
 4. Check that JV CLI is detected. Older versions require an upgrade; there is no
    fallback that puts prompts in command-line arguments.
@@ -144,9 +149,9 @@ is included.
 ## Current limits
 
 AMD64/x86_64 only. Windows trusted-host only; restricted network-denied execution
-is unsupported with the pinned Windows backend. No WSL, ARM64, macOS, bridge
-images, integrated terminal, PTY/ConPTY, automatic updates or guaranteed remote
-cancellation. Desktop does not restore the previous chat UI session.
+is unsupported with the pinned Windows backend. No WSL, ARM64, macOS, chat image
+attachments, integrated terminal, PTY/ConPTY, automatic updates or guaranteed
+remote cancellation. Desktop does not restore the previous chat UI session.
 
 ## Development
 
