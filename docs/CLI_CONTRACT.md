@@ -1,5 +1,13 @@
 # JV CLI compatibility baseline
 
+Prepared Desktop 0.2.3 pairs Structured sessions with JV CLI 0.5.3. Protocol 1
+negotiates `capabilities.tool_images` and `capabilities.transports` before sending
+`session.start` with explicit `transport: structured` or `transport: legacy`.
+Older bridges keep the platform compatibility floors below and can use Legacy.
+Structured tool images stay inside CLI; Desktop events carry no image payloads.
+Chat attachments remain unavailable. A failed Structured turn is never resent
+automatically in Legacy. See [release preparation](RELEASE_PREPARATION.md).
+
 Desktop's native adapter requires **bridge protocol 1** and platform-specific
 released CLI versions: **0.5.0 or newer on Windows**, **0.4.9 or newer on Linux**.
 The same floor is enforced by both version detection and bridge.ready validation.

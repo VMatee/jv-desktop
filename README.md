@@ -1,8 +1,11 @@
-# JV Desktop 0.2.3 (release candidate in preparation)
+# JV Desktop 0.2.3 (source prepared; release pending)
 
 The installation links below remain on the published stable release until the
 Windows candidate completes acceptance. Structured image-assisted coding pairs
 this candidate with JV CLI 0.5.3; install CLI first.
+
+See [prepared changes](docs/CHANGELOG.md) and
+[release preparation and Windows handoff](docs/RELEASE_PREPARATION.md).
 
 A desktop workspace for JV conversations: choose a project folder and follow
 commands, changed files and assistant replies in one window. Supports Linux
