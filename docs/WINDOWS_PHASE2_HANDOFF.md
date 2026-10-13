@@ -1,5 +1,9 @@
 # Windows Phase 2 completion and Linux Phase 3 handoff
 
+For the later official releases and successful real-service acceptance, see the
+[2026-10-13 Windows release handoff](WINDOWS_OFFICIAL_RELEASE_20261013.md).
+The dated RC1 record below is preserved as historical evidence.
+
 Completed 2026-10-10 on the native Windows development PC. Windows-only release
 candidates are published and public downloads have been verified. Both accepted
 products remain installed. No production services were modified and no real
