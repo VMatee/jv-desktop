@@ -389,7 +389,11 @@ fn public_message(message: &str) -> bool {
         "The AI service requires administrator authentication."
         | "The service restarted after submission. The request was not sent again to prevent a duplicate."
         | "Provider job failed."
-        | "Provider is temporarily unavailable.")
+        | "Provider is temporarily unavailable."
+        | "Agent context exceeds the text limit; start a new response without previous_response_id"
+        | "Structured context exceeds the frozen binding text limit"
+        | "Structured task round budget exhausted; start a new response"
+        | "Custom input/output exceeds the 32 KiB limit")
 }
 
 fn normalize(v: &Value) -> Result<Value, E> {
@@ -546,6 +550,25 @@ mod public_error_tests {
                 "The AI service requires administrator authentication."
             );
             assert!(!value.to_string().contains("SECRET"));
+        }
+    }
+
+    #[test]
+    fn structured_input_limits_preserve_only_exact_reviewed_messages() {
+        for message in [
+            "Agent context exceeds the text limit; start a new response without previous_response_id",
+            "Structured context exceeds the frozen binding text limit",
+            "Structured task round budget exhausted; start a new response",
+            "Custom input/output exceeds the 32 KiB limit",
+        ] {
+            let event = json!({"type":"turn.failed", "source":"remote",
+                "support_code":"JV-INPUT-001", "public_message":message});
+            assert_eq!(normalize(&event).unwrap()["public_message"], message);
+            for suffix in ["\n", " token=SECRET"] {
+                let mut unsafe_event = event.clone();
+                unsafe_event["public_message"] = json!(format!("{message}{suffix}"));
+                assert!(normalize(&unsafe_event).unwrap().get("public_message").is_none());
+            }
         }
     }
 

@@ -21,6 +21,10 @@ const publicMessages = new Set([
   'The service restarted after submission. The request was not sent again to prevent a duplicate.',
   'Provider job failed.',
   'Provider is temporarily unavailable.',
+  'Agent context exceeds the text limit; start a new response without previous_response_id',
+  'Structured context exceeds the frozen binding text limit',
+  'Structured task round budget exhausted; start a new response',
+  'Custom input/output exceeds the 32 KiB limit',
 ]);
 export function remoteSupport(code: unknown, message: unknown, fallback: string): PublicSupport | null {
   if (typeof code !== 'string' || code.length > 32 || !/^JV-(?:[A-Z]{1,16}-){1,3}[0-9]{3}$/.test(code) || /[^A-Z0-9-]/.test(code)) return null;

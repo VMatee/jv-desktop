@@ -166,3 +166,15 @@ Tauri 2 + React/TypeScript + Rust. No CLI source is embedded. See
 [Development](docs/DEVELOPMENT.md), [Architecture](docs/ARCHITECTURE.md),
 [Validation](docs/VALIDATION.md) and [Windows integration](docs/WINDOWS_PLAN.md).
 Ordinary tests use fake executables and never contact production.
+
+## Structured task input limits
+
+`JV-INPUT-001` is a general input rejection. Updated CLI and Desktop builds show
+reviewed context-size, tool-output-size, and task-round-limit reasons supplied by
+the service. A code alone does not prove which limit or validation rule failed.
+
+When the reason says context or round budget is exhausted, review any completed
+file changes, select **Open Folder**, choose the same project folder, and sign in
+to start a fresh Structured session. Give it a smaller task and ask it to inspect
+only relevant file sections. The files remain; the previous conversation is not
+carried into the new session. Do not repeatedly resend the exhausted request.

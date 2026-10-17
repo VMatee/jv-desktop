@@ -59,3 +59,28 @@ describe('nonterminal remote status', () => {
     expect(parseBridgeEvent({ type:'turn.status', source:'remote', status:'failed' })).toBeNull();
   });
 });
+
+// The server uses one input code for several different gates. Never infer the
+// reason from that code or pass through arbitrary server prose.
+describe('structured input limit diagnostics', () => {
+  const messages = [
+    'Agent context exceeds the text limit; start a new response without previous_response_id',
+    'Structured context exceeds the frozen binding text limit',
+    'Structured task round budget exhausted; start a new response',
+    'Custom input/output exceeds the 32 KiB limit',
+  ];
+  it.each(messages)('preserves the exact reviewed reason: %s', (message) => {
+    expect(parseBridgeEvent({ type: 'turn.failed', source: 'remote',
+      support_code: 'JV-INPUT-001', public_message: message }))
+      .toMatchObject({ type: 'error', code: 'JV-INPUT-001', message });
+    for (const suffix of ['\n', ' token=SECRET']) {
+      expect(parseBridgeEvent({ type: 'turn.failed', source: 'remote',
+        support_code: 'JV-INPUT-001', public_message: message + suffix }))
+        .toMatchObject({ message: 'JV could not complete this request.' });
+    }
+  });
+  it('does not guess a context limit from the generic input code', () => {
+    expect(parseBridgeEvent({ type: 'turn.failed', source: 'remote', support_code: 'JV-INPUT-001' }))
+      .toMatchObject({ message: 'JV could not complete this request.' });
+  });
+});
